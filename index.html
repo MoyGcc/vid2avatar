@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="description"
+        content="gDNA: Towards Generative Detailed Neural Avatars">
+  <meta name="keywords" content="gDNA">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>gDNA: Towards Generative Detailed Neural Avatars</title>
+
+
+  </script>
+
+  <link href="https://fonts.googleapis.com/css?family=Google+Sans|Noto+Sans|Castoro"
+        rel="stylesheet">
+
+  <link rel="stylesheet" href="./static/css/bulma.min.css">
+  <link rel="stylesheet" href="./static/css/bulma-carousel.min.css">
+  <link rel="stylesheet" href="./static/css/bulma-slider.min.css">
+  <link rel="stylesheet" href="./static/css/fontawesome.all.min.css">
+  <link rel="stylesheet"
+        href="https://cdn.jsdelivr.net/gh/jpswalsh/academicons@1/css/academicons.min.css">
+  <link rel="stylesheet" href="./static/css/index.css">
+
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+  <script defer src="./static/js/fontawesome.all.min.js"></script>
+  <script src="./static/js/bulma-carousel.min.js"></script>
+  <script src="./static/js/bulma-slider.min.js"></script>
+  <script src="./static/js/index.js"></script>
+</head>
+<body>
+
+<section class="hero">
+  <div class="hero-body">
+    <div class="container is-max-desktop">
+      <div class="columns is-centered">
+        <div class="column has-text-centered">
+          <h1 class="title is-1 publication-title">gDNA: Towards Generative Detailed Neural Avatars</h1>
+          <div class="is-size-5 publication-authors">
+            <span class="author-block">
+              <a href="https://ait.ethz.ch/people/xu/">Xu Chen</a><sup>1,3</sup>,</span>
+            <span class="author-block">
+              <a href="https://inf.ethz.ch/people/people-atoz/person-detail.MjUwNDAx.TGlzdC8zMDQsLTIxNDE4MTU0NjA=.html">Tianjian Jiang</a><sup>1</sup>,</span>
+            <span class="author-block">
+              <a href="https://ait.ethz.ch/people/song/">Jie Song</a><sup>1</sup>,</span>
+            <span class="author-block">
+              <a href="https://is.mpg.de/person/jyang">Jinlong Yang</a><sup>3</sup>,</span>
+            <span class="author-block">
+              <a href="https://ps.is.mpg.de/~black">Michael J. Black</a><sup>3</sup>,
+            </span>
+            <span class="author-block">
+              <a href="http://www.cvlibs.net/">Andreas Geiger</a><sup>2,3</sup>,
+            </span>
+            <span class="author-block">
+              <a href="https://ait.ethz.ch/people/hilliges/">Otmar Hilliges</a><sup>1</sup>
+            </span>
+          </div>
+
+          <div class="is-size-5 publication-authors">
+            <span class="author-block"><sup>1</sup>ETH Zürich,</span>
+            <span class="author-block"><sup>2</sup>University of Tübingen,</span>
+            <br>
+            <span class="author-block"><sup>3</sup>Max Planck Institute for Intelligent Systems, Tübingen
+            </span>
+          </div>
+
+          <div class="column has-text-centered">
+            <div class="publication-links">
+              <!-- PDF Link. -->
+              <span class="link-block">
+                <a href="https://ait.ethz.ch/projects/2022/gdna/downloads/main.pdf"
+                   class="external-link button is-normal is-rounded is-dark">
+                  <span class="icon">
+                      <i class="fas fa-file-pdf"></i>
+                  </span>
+                  <span>Paper</span>
+                </a>
+              </span>
+              <!-- Video Link. -->
+              <span class="link-block">
+                <a href="https://youtu.be/uOyoH7OO16I"
+                   class="external-link button is-normal is-rounded is-dark">
+                  <span class="icon">
+                      <i class="fab fa-youtube"></i>
+                  </span>
+                  <span>Video</span>
+                </a>
+              </span>
+              <!-- Medium Link. -->
+              <!-- <span class="link-block">
+                <a href="https://eth-ait.medium.com/animate-implicit-shapes-with-forward-skinning-c7ebbf355694"
+                    class="external-link button is-normal is-rounded is-dark">
+                  <span class="icon">
+                      <i class="fab fa-medium-m"></i>
+                  </span>
+                  <span>Medium</span>
+                </a>
+              </span> -->
+              <!-- Blog Link. -->
+              <!-- <span class="link-block">
+                <a href="https://autonomousvision.github.io/snarf/"
+                    class="external-link button is-normal is-rounded is-dark">
+                  <span class="icon">
+                      <i class="fab fa-blogger-b"></i>
+                  </span>
+                  <span>Blog</span>
+                </a>
+              </span> -->
+              <!-- Code Link. -->
+              <span class="link-block">
+                <a href="https://github.com/xuchen-ethz/gdna"
+                   class="external-link button is-normal is-rounded is-dark">
+                  <span class="icon">
+                      <i class="fab fa-github"></i>
+                  </span>
+                  <span>Code</span>
+                  </a>
+              </span>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="hero teaser">
+  <div class="container is-max-desktop">
+    <div class="hero-body">
+        <img src="https://ait.ethz.ch/projects/2022/gdna/downloads/assets/teaser.png"  class="center"/>
+      <h2 class="subtitle has-text-centered">
+        gDNA generates animatable avatars in various identities and clothing with surface details by learning from static scans. 
+      </h2>
+    </div>
+  </div>
+</section>
+
+
+<section class="section">
+  <div class="container is-max-desktop">
+    <!-- Abstract. -->
+    <div class="columns is-centered has-text-centered">
+      <div class="column is-four-fifths">
+        <h2 class="title is-3">Abstract</h2>
+        <div class="content has-text-justified">
+          <p>
+          To make 3D human avatars widely available, we must be able to generate a variety of 3D virtual humans with varied identities and shapes in arbitrary poses. This task is challenging due to the diversity of clothed body shapes, their complex articulations, and the resulting rich, yet stochastic geometric detail in clothing. Hence, current methods to represent 3D people do not provide a full generative model of people in clothing. In this paper, we propose a novel method that learns to generate detailed 3D shapes of people in a variety of garments with corresponding skinning weights. Specifically, we devise a multi-subject forward skinning module that is learned from only a few posed, un-rigged scans per subject. To capture the stochastic nature of high-frequency details in garments, we leverage an adversarial loss formulation that encourages the model to capture the underlying statistics. We provide empirical evidence that this leads to realistic generation of local details such as clothing wrinkles. We show that our model is able to generate natural human avatars wearing diverse and detailed clothing. Furthermore, we show that our method can be used on the task of fitting human models to raw scans, outperforming the previous state-of-the-art.          
+        </p>
+        </div>
+      </div>
+    </div>
+    <!--/ Abstract. -->
+
+    <!-- Paper video. -->
+    <div class="columns is-centered has-text-centered">
+      <div class="column is-four-fifths">
+        <h2 class="title is-3">Video</h2>
+        <div class="publication-video">
+          <iframe width="560" height="315" src="https://www.youtube.com/embed/uOyoH7OO16I" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+        </div>
+      </div>
+    </div>
+    <!--/ Paper video. -->
+  </div>
+</section>
+
+
+<section class="section" id="method">
+  <div class="container is-max-desktop content">
+    <h2 class="title">Method</h2>
+    <img src="https://ait.ethz.ch/projects/2022/gdna/downloads/assets/pipeline.png"  height="250" class="center"/>
+    <p>
+      To generate diverse 3D humans, we build an implicit multi-subject articulated model.
+
+      We model clothed human shapes and detailed surface normals in a pose-independent canonical space via a neural implicit surface representation, conditioned on latent codes.
+    </p>
+
+    
+    <h3 class="title">Learning Shape and Skinning from "Crowdsampled" Posed Scans</h2>
+    <p>
+      In previous work, learning shape and skinning either requires direct supervision or many poses of the same subject. This dramatically limits the data amount and/or quality. With our proposed multi-subject forward skinning module, our method can learn shape and skinning weights jointly from "crowd sampled" poses - one or very few poses per subject from various subjects. As a result, our method can leverage high-quality commercial scans with varying topology and one or very few poses per subject, which was not possible before.
+    </p>
+
+    <h3 class="title">Learning 3D Wrinkles via 2D Adversarial Loss</h2>
+    <p>
+      We found that learning high-quality surface details is difficult with a pure reconstruction loss due to the stochastic nature of wrinkles. While adversarial losses are promising to improve details, applying them in 3D is infeasible due to the memory requirement. We propose to learn 3D wrinkles by projecting them to 2D, and then apply a 2D adversarial loss to optimize our 3D detailed normal field. In this way, our method learns to produce faithful wrinkles.
+    </p>
+
+  </div>
+</section>
+
+<section class="section" id="result">
+  <div class="container is-max-desktop content">
+    <h2 class="title">Result</h2>
+
+    <h3 class="title">Disentangled Generation</h3>
+    <p>
+      Our model enables disentangled control over coarse shape, fine details, body pose and body size.
+    </p>
+    <div class="columns is-centered">
+      <!-- Visual Effects. -->
+      <div class="column">
+        <div class="content">
+          <h4 class="title">Coarse Shape</h4>
+          <video autoplay controls muted loop height="100%">
+            <source src="https://ait.ethz.ch/projects/2022/gdna/downloads/assets/shape_crop.mp4"
+                    type="video/mp4">
+          </video>
+        </div>
+      </div>
+      <!--/ Visual Effects. -->
+
+      <!-- Matting. -->
+      <div class="column">
+        <h4 class="title">Fine Details</h4>
+        <div class="columns is-centered">
+          <div class="column content">
+          <video autoplay controls muted loop height="100%">
+            <source src="https://ait.ethz.ch/projects/2022/gdna/downloads/assets/detail_crop.mp4"
+                    type="video/mp4">
+          </video>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="columns is-centered">
+      <!-- Visual Effects. -->
+      <div class="column">
+        <div class="content">
+          <h4 class="title">Body Size</h4>
+          <video autoplay controls muted loop height="100%">
+            <source src="https://ait.ethz.ch/projects/2022/gdna/downloads/assets/size_crop.mp4"
+                    type="video/mp4">
+          </video>
+        </div>
+      </div>
+      <!--/ Visual Effects. -->
+
+      <!-- Matting. -->
+      <div class="column">
+        <h4 class="title">Body Pose</h4>
+        <div class="columns is-centered">
+          <div class="column content">
+          <video autoplay controls muted loop height="100%">
+            <source src="https://ait.ethz.ch/projects/2022/gdna/downloads/assets/pose_crop.mp4"
+                    type="video/mp4">
+          </video>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h3 class="title">Interpolation+Animation</h3>
+    <p>
+      We interpolate between latent codes of training samples during animation.
+    </p>
+    <video poster="" id="chair-tp" autoplay controls muted loop width="50%">
+      <source src="https://ait.ethz.ch/projects/2022/gdna/downloads/assets/interp_crop.mp4", type="video/mp4">
+    </video>
+
+    <h3 class="title">Random Sampling</h3>
+    <p>
+      We can randomly sample 3D avatars in various clothing and identities and animate them with pose sequences from existing motion databases.
+    </p>
+
+  <section class="hero is-light is-small">
+    <div class="hero-body">
+      <div class="container">
+        <div id="results-carousel" class="carousel results-carousel">
+          <div class="item item-steve">
+            <video poster="" autoplay controls muted loop height="100%">
+              <source src="https://ait.ethz.ch/projects/2022/gdna/downloads/assets/sample1_crop.mp4" type="video/mp4">
+            </video>
+          </div>
+          <div class="item item-chair-tp">
+            <video poster="" autoplay controls muted loop height="100%">
+              <source src="https://ait.ethz.ch/projects/2022/gdna/downloads/assets/sample7_crop.mp4" type="video/mp4">
+            </video>
+          </div>
+          <div class="item item-chair-tp">
+            <video poster="" autoplay controls muted loop height="100%">
+              <source src="https://ait.ethz.ch/projects/2022/gdna/downloads/assets/sample2_crop.mp4" type="video/mp4">
+            </video>
+          </div>
+          <div class="item item-chair-tp">
+            <video poster="" autoplay controls muted loop height="100%">
+              <source src="https://ait.ethz.ch/projects/2022/gdna/downloads/assets/sample8_crop.mp4" type="video/mp4">
+            </video>
+          </div>
+          <div class="item item-chair-tp">
+            <video poster="" autoplay controls muted loop height="100%">
+              <source src="https://ait.ethz.ch/projects/2022/gdna/downloads/assets/sample3_crop.mp4" type="video/mp4">
+            </video>
+          </div>
+          <div class="item item-chair-tp">
+            <video poster="" autoplay controls muted loop height="100%">
+              <source src="https://ait.ethz.ch/projects/2022/gdna/downloads/assets/sample9_crop.mp4" type="video/mp4">
+            </video>
+          </div>
+          <div class="item item-chair-tp">
+            <video poster="" autoplay controls muted loop height="100%">
+              <source src="https://ait.ethz.ch/projects/2022/gdna/downloads/assets/sample4_crop.mp4" type="video/mp4">
+            </video>
+          </div>
+          <div class="item item-chair-tp">
+            <video poster="" autoplay controls muted loop height="100%">
+              <source src="https://ait.ethz.ch/projects/2022/gdna/downloads/assets/sample10_crop.mp4" type="video/mp4">
+            </video>
+          </div>
+          <div class="item item-chair-tp">
+            <video poster="" autoplay controls muted loop height="100%">
+              <source src="https://ait.ethz.ch/projects/2022/gdna/downloads/assets/sample5_crop.mp4" type="video/mp4">
+            </video>
+          </div>
+          <div class="item item-chair-tp">
+            <video poster="" autoplay controls muted loop height="100%">
+              <source src="https://ait.ethz.ch/projects/2022/gdna/downloads/assets/sample11_crop.mp4" type="video/mp4">
+            </video>
+          </div>
+          <div class="item item-chair-tp">
+            <video poster="" autoplay controls muted loop height="100%">
+              <source src="https://ait.ethz.ch/projects/2022/gdna/downloads/assets/sample6_crop.mp4" type="video/mp4">
+            </video>
+          </div>
+          <div class="item item-chair-tp">
+            <video poster="" autoplay controls muted loop height="100%">
+              <source src="https://ait.ethz.ch/projects/2022/gdna/downloads/assets/sample12_crop.mp4" type="video/mp4">
+            </video>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+  </div>
+</section>
+
+<section class="section" id="BibTeX">
+  <div class="container is-max-desktop content">
+    <h2 class="title">BibTeX</h2>
+    <pre><code>@article{chen2022gdna,
+      title={gDNA: Towards Generative Detailed Neural Avatars},
+      author={Chen, Xu and Jiang, Tianjian and Song, Jie and Yang, Jinlong and Black, Michael J and Geiger, Andreas and Hilliges, Otmar},    
+      journal   = {arXiv},
+      year      = {2022}
+    }</code></pre>
+  </div>
+</section>
+
+
+<footer class="footer">
+  <div class="container">
+    <div class="content has-text-centered">
+      <a class="icon-link"
+         href="https://ait.ethz.ch/projects/2022/gdna/downloads/main.pdf">
+        <i class="fas fa-file-pdf"></i>
+      </a>
+      <a class="icon-link" href="https://github.com/keunhong" class="external-link" disabled>
+        <i class="fab fa-github"></i>
+      </a>
+    </div>
+    <div class="columns is-centered">
+      <div class="column is-8">
+        <div class="content">
+          <p>
+            This website is licensed under a <a rel="license"
+                                                href="http://creativecommons.org/licenses/by-sa/4.0/">Creative
+            Commons Attribution-ShareAlike 4.0 International License</a>.
+          </p>
+          <p>
+            This webpage is built with the template from <a href="https://github.com/nerfies/nerfies.github.io">NeRFies</a>. We sincerely thank <a href="https://keunhong.com/">Keunhong Park</a> for developing and open-sourcing this template.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

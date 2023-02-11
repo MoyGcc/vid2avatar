@@ -1,5 +1,5 @@
 # Vid2Avatar Project Page
-This is the repository that contains source code for the [Vid2Avatar project page](https://moygcc.github.io/vid2avatar).
+This is the repository that contains source code for the [Vid2Avatar project page](https://moygcc.github.io/vid2avatar/).
 
 # Acknowledgement
 This webpage is built with the template from [NeRFies](https://github.com/nerfies/nerfies.github.io). We sincerely thank <a href="https://keunhong.com/">Keunhong Park</a> for developing and open-sourcing this template.

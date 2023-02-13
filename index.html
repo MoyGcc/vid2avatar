@@ -184,12 +184,12 @@
   <div class="container is-max-desktop content">
     <h2 class="title">Result</h2>
 
-    <h3 class="title">Disentangled Generation</h3>
+    <h3 class="title">Comparison</h3>
     <p>
-      Our model enables disentangled control over coarse shape, fine details, body pose and body size.
+      Our approach outperforms existing state-of-the-art methods due to the superiority of our method to the better decoupling of humans from the background vis self-supervised scene decomposition.
     </p>
-    <div class="columns is-centered">
-      <!-- Visual Effects. -->
+    <!-- <div class="columns is-centered">
+
       <div class="column">
         <div class="content">
           <h4 class="title">Coarse Shape</h4>
@@ -199,9 +199,9 @@
           </video>
         </div>
       </div>
-      <!--/ Visual Effects. -->
 
-      <!-- Matting. -->
+
+
       <div class="column">
         <h4 class="title">Fine Details</h4>
         <div class="columns is-centered">
@@ -213,28 +213,25 @@
           </div>
         </div>
       </div>
-    </div>
+    </div> -->
 
-    <div class="columns is-centered">
-      <!-- Visual Effects. -->
+     <div class="columns is-centered">
       <div class="column">
         <div class="content">
           <h4 class="title">Body Size</h4>
           <video autoplay controls muted loop height="100%">
-            <source src="https://ait.ethz.ch/projects/2022/gdna/downloads/assets/size_crop.mp4"
+            <source src="https://ait.ethz.ch/projects/2023/vid2avatar/downloads/assets/comparison_online.mp4"
                     type="video/mp4">
           </video>
         </div>
       </div>
-      <!--/ Visual Effects. -->
 
-      <!-- Matting. -->
       <div class="column">
         <h4 class="title">Body Pose</h4>
         <div class="columns is-centered">
           <div class="column content">
           <video autoplay controls muted loop height="100%">
-            <source src="https://ait.ethz.ch/projects/2022/gdna/downloads/assets/pose_crop.mp4"
+            <source src="https://ait.ethz.ch/projects/2023/vid2avatar/downloads/assets/comparison_threedpw.mp4"
                     type="video/mp4">
           </video>
           </div>
@@ -242,17 +239,17 @@
       </div>
     </div>
 
-    <h3 class="title">Interpolation+Animation</h3>
+    <!-- <h3 class="title">Interpolation+Animation</h3>
     <p>
       We interpolate between latent codes of training samples during animation.
     </p>
     <video poster="" id="chair-tp" autoplay controls muted loop width="50%">
       <source src="https://ait.ethz.ch/projects/2022/gdna/downloads/assets/interp_crop.mp4", type="video/mp4">
-    </video>
+    </video> -->
 
-    <h3 class="title">Random Sampling</h3>
+    <h3 class="title">More Qualitative Results</h3>
     <p>
-      We can randomly sample 3D avatars in various clothing and identities and animate them with pose sequences from existing motion databases.
+      Our method can generalize to different human shapes, garment styles and facial features even under challenging poses and complicated environments.
     </p>
 
   <section class="hero is-light is-small">

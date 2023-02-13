@@ -100,7 +100,7 @@
               </span> -->
               <!-- Code Link. -->
               <span class="link-block">
-                <a href="https://github.com/moygcc/gdna"
+                <a href="https://github.com/moygcc/vid2avatar"
                    class="external-link button is-normal is-rounded is-dark">
                   <span class="icon">
                       <i class="fab fa-github"></i>
@@ -120,9 +120,9 @@
 <section class="hero teaser">
   <div class="container is-max-desktop">
     <div class="hero-body">
-        <img src="https://ait.ethz.ch/projects/2022/gdna/downloads/assets/teaser.png"  class="center"/>
+        <img src="https://ait.ethz.ch/projects/2023/vid2avatar/downloads/assets/teaser.png"  class="center"/>
       <h2 class="subtitle has-text-centered">
-        gDNA generates animatable avatars in various identities and clothing with surface details by learning from static scans. 
+        Vid2Avatar, a method to reconstruct detailed 3D avatars from monocular videos in the wild via self-supervised scene decomposition. 
       </h2>
     </div>
   </div>
@@ -137,7 +137,7 @@
         <h2 class="title is-3">Abstract</h2>
         <div class="content has-text-justified">
           <p>
-          To make 3D human avatars widely available, we must be able to generate a variety of 3D virtual humans with varied identities and shapes in arbitrary poses. This task is challenging due to the diversity of clothed body shapes, their complex articulations, and the resulting rich, yet stochastic geometric detail in clothing. Hence, current methods to represent 3D people do not provide a full generative model of people in clothing. In this paper, we propose a novel method that learns to generate detailed 3D shapes of people in a variety of garments with corresponding skinning weights. Specifically, we devise a multi-subject forward skinning module that is learned from only a few posed, un-rigged scans per subject. To capture the stochastic nature of high-frequency details in garments, we leverage an adversarial loss formulation that encourages the model to capture the underlying statistics. We provide empirical evidence that this leads to realistic generation of local details such as clothing wrinkles. We show that our model is able to generate natural human avatars wearing diverse and detailed clothing. Furthermore, we show that our method can be used on the task of fitting human models to raw scans, outperforming the previous state-of-the-art.          
+            We present Vid2Avatar, a method to learn human avatars from monocular in-the-wild videos. Reconstructing humans that move naturally from monocular in-the-wild videos is difficult. Solving it requires accurately separating humans from arbitrary backgrounds. Moreover, it requires reconstructing detailed 3D surface from short video sequences, making it even more challenging. Despite these challenges, our method does not require any groundtruth supervision or priors extracted from large datasets of clothed human scans, nor do we rely on any external segmentation modules. Instead, it solves the tasks of scene decomposition and surface reconstruction directly in 3D by modeling both the human and the background in the scene jointly, parameterized via two separate neural fields. Specifically, we define a temporally consistent human representation in canonical space and formulate a global optimization over the background model, the canonical human shape and texture, and per-frame human pose parameters. A coarse-to-fine sampling strategy for volume rendering and novel objectives are introduced for a clean separation of dynamic human and static background, yielding detailed and robust 3D human geometry reconstructions. We evaluate our methods on publicly available datasets and show improvements over prior art.          
         </p>
         </div>
       </div>
@@ -161,7 +161,7 @@
 <section class="section" id="method">
   <div class="container is-max-desktop content">
     <h2 class="title">Method</h2>
-    <img src="https://ait.ethz.ch/projects/2022/gdna/downloads/assets/pipeline.png"  height="250" class="center"/>
+    <img src="https://ait.ethz.ch/projects/2023/vid2avatar/downloads/assets/pipeline.png"  height="250" class="center"/>
     <p>
       To generate diverse 3D humans, we build an implicit multi-subject articulated model.
 

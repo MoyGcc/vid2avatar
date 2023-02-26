@@ -78,26 +78,6 @@
                   <span>Video</span>
                 </a>
               </span>
-              <!-- Medium Link. -->
-              <!-- <span class="link-block">
-                <a href="https://eth-ait.medium.com/animate-implicit-shapes-with-forward-skinning-c7ebbf355694"
-                    class="external-link button is-normal is-rounded is-dark">
-                  <span class="icon">
-                      <i class="fab fa-medium-m"></i>
-                  </span>
-                  <span>Medium</span>
-                </a>
-              </span> -->
-              <!-- Blog Link. -->
-              <!-- <span class="link-block">
-                <a href="https://autonomousvision.github.io/snarf/"
-                    class="external-link button is-normal is-rounded is-dark">
-                  <span class="icon">
-                      <i class="fab fa-blogger-b"></i>
-                  </span>
-                  <span>Blog</span>
-                </a>
-              </span> -->
               <!-- Code Link. -->
               <span class="link-block">
                 <a href="https://github.com/MoyGcc"
@@ -166,16 +146,6 @@
       To reconstruct detailed geometry and appearance of the implicit neural avatars from monocular videos in the wild, we solve the tasks of scene decomposition and surface reconstrution directly in 3D in contrast to prior works that utilize off-the-shelf 2D segmentation tools or manually labeled masks. To achieve this, we model both the human and background in the scene implicitly, parametrized via two separate neural fields which are learned jointly from images to composite the whole scene. To alleviate the ambiguity of in-contact body and scene parts and to better delineate the surfaces, we contribute novel objectives that leverage the dynamically updated human shape in canonical space to regularize the ray opacity. 
     </p>
 
-    
-    <!-- <h3 class="title">Learning Shape and Skinning from "Crowdsampled" Posed Scans</h2>
-    <p>
-      In previous work, learning shape and skinning either requires direct supervision or many poses of the same subject. This dramatically limits the data amount and/or quality. With our proposed multi-subject forward skinning module, our method can learn shape and skinning weights jointly from "crowd sampled" poses - one or very few poses per subject from various subjects. As a result, our method can leverage high-quality commercial scans with varying topology and one or very few poses per subject, which was not possible before.
-    </p> -->
-
-    <!-- <h3 class="title">Learning 3D Wrinkles via 2D Adversarial Loss</h2>
-    <p>
-      We found that learning high-quality surface details is difficult with a pure reconstruction loss due to the stochastic nature of wrinkles. While adversarial losses are promising to improve details, applying them in 3D is infeasible due to the memory requirement. We propose to learn 3D wrinkles by projecting them to 2D, and then apply a 2D adversarial loss to optimize our 3D detailed normal field. In this way, our method learns to produce faithful wrinkles.
-    </p> -->
 
   </div>
 </section>
@@ -188,32 +158,6 @@
     <p>
       Our approach outperforms existing state-of-the-art methods due to the superiority of our method to the better decoupling of humans from the background vis self-supervised scene decomposition.
     </p>
-    <!-- <div class="columns is-centered">
-
-      <div class="column">
-        <div class="content">
-          <h4 class="title">Coarse Shape</h4>
-          <video autoplay controls muted loop height="100%">
-            <source src="https://ait.ethz.ch/projects/2022/gdna/downloads/assets/shape_crop.mp4"
-                    type="video/mp4">
-          </video>
-        </div>
-      </div>
-
-
-
-      <div class="column">
-        <h4 class="title">Fine Details</h4>
-        <div class="columns is-centered">
-          <div class="column content">
-          <video autoplay controls muted loop height="100%">
-            <source src="https://ait.ethz.ch/projects/2022/gdna/downloads/assets/detail_crop.mp4"
-                    type="video/mp4">
-          </video>
-          </div>
-        </div>
-      </div>
-    </div> -->
 
      <div class="columns is-centered">
       <div class="column">
@@ -306,16 +250,6 @@
               <source src="https://ait.ethz.ch/projects/2023/vid2avatar/downloads/assets/parkinglot.mp4" type="video/mp4">
             </video>
           </div>
-          <!-- <div class="item item-chair-tp">
-            <video poster="" autoplay controls muted loop height="100%">
-              <source src="https://ait.ethz.ch/projects/2023/vid2avatar/downloads/assets/sample6_crop.mp4" type="video/mp4">
-            </video>
-          </div> -->
-          <!-- <div class="item item-chair-tp">
-            <video poster="" autoplay controls muted loop height="100%">
-              <source src="https://ait.ethz.ch/projects/2023/vid2avatar/downloads/assets/sample12_crop.mp4" type="video/mp4">
-            </video>
-          </div> -->
         </div>
       </div>
     </div>

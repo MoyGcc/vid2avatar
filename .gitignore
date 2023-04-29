@@ -127,3 +127,20 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+.vscode/
+*.ply
+*.npz
+*.npy
+*.pkl
+outputs
+*.obj
+*.ipynb
+data
+code/UNKNOWN.egg-info
+code/dist
+code/build
+visualization/imgui.ini
+export
+preprocessing/raw_data
+preprocessing/romp

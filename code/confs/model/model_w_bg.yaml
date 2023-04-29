@@ -1,0 +1,77 @@
+learning_rate : 5.0e-4
+sched_milestones : [200,500]
+sched_factor : 0.5
+smpl_init: True
+is_continue: False
+use_body_parsing: False
+with_bkgd: True
+using_inpainting: False
+use_smpl_deformer: True
+use_bbox_sampler: False
+
+implicit_network:
+    feature_vector_size: 256
+    d_in: 3
+    d_out: 1
+    dims: [ 256, 256, 256, 256, 256, 256, 256, 256 ]
+    init: 'geometry'
+    bias: 0.6
+    skip_in: [4]
+    weight_norm: True
+    embedder_mode: 'fourier'
+    multires: 6
+    cond: 'smpl'
+    scene_bounding_sphere: 3.0
+rendering_network:
+    feature_vector_size: 256
+    mode: "pose"
+    d_in:  14
+    d_out: 3
+    dims: [ 256, 256, 256, 256]
+    weight_norm: True
+    multires_view: -1
+bg_implicit_network:
+    feature_vector_size: 256
+    d_in: 4
+    d_out: 1
+    dims: [ 256, 256, 256, 256, 256, 256, 256, 256 ]
+    init: 'none'
+    bias: 0.0
+    skip_in: [4]
+    weight_norm: False
+    embedder_mode: 'fourier'
+    multires: 10
+    cond: 'frame'
+    dim_frame_encoding: 32
+bg_rendering_network:
+    feature_vector_size: 256
+    mode: 'nerf_frame_encoding'
+    d_in: 3
+    d_out: 3
+    dims: [128]
+    weight_norm: False
+    multires_view: 4
+    dim_frame_encoding: 32
+shadow_network:
+    d_in: 3
+    d_out: 1
+    dims: [128, 128]
+    weight_norm: False
+density:
+    params_init: {beta: 0.1}
+    beta_min: 0.0001
+ray_sampler:
+    near: 0.0
+    N_samples: 64
+    N_samples_eval: 128
+    N_samples_extra: 32
+    eps: 0.1
+    beta_iters: 10
+    max_total_iters: 5
+    N_samples_inverse_sphere: 32
+    add_tiny: 1.0e-6
+loss:
+    eikonal_weight : 0.1
+    bce_weight: 5.0e-3
+    opacity_sparse_weight: 3.0e-3
+    in_shape_weight: 1.0e-2

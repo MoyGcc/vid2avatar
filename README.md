@@ -18,7 +18,7 @@ mv /path/to/smpl/models/basicModel_f_lbs_10_207_0_v1.0.0.pkl code/lib/smpl/smpl_
 mv /path/to/smpl/models/basicmodel_m_lbs_10_207_0_v1.0.0.pkl code/lib/smpl/smpl_model/SMPL_MALE.pkl
 ```
 ## Download preprocessed demo data
-You can quickly start trying out Vid2Avatar with a preprocessed demo sequence. This can be downloaded from [Google drive](https://drive.google.com/drive/folders/1AUtKSmib7CvpWBCFO6mQ9spVrga_CTU4?usp=share_link) which is originally a video clip provided by [NeuMan](https://github.com/apple/ml-neuman). Put this preprocessed demo data under the folder `data/`.
+You can quickly start trying out Vid2Avatar with a preprocessed demo sequence including the pre-trained checkpoint. This can be downloaded from [Google drive](https://drive.google.com/drive/folders/1AUtKSmib7CvpWBCFO6mQ9spVrga_CTU4?usp=share_link) which is originally a video clip provided by [NeuMan](https://github.com/apple/ml-neuman). Put this preprocessed demo data under the folder `data/`.
 
 ## Training
 Before training, make sure that the `metaninfo` in the data config file `/code/confs/dataset/video.yaml` does match the expected training video. You can also continue the training by changing the flag `is_continue` in the model config file `code/confs/model/model_w_bg`. And then run:

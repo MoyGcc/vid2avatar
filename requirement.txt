@@ -4,7 +4,7 @@ scikit-image==0.18.1
 torch==1.9.1
 torchvision==0.10.1
 git+https://github.com/facebookresearch/pytorch3d.git
-pytorch-lightning==1.8.6
+pytorch-lightning==1.5.7
 hydra-core==1.1.1
 wandb==0.13.1
 aitviewer

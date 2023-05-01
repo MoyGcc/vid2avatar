@@ -1,5 +1,6 @@
 # distutils: language = c++
 cimport cython
+from libc.stdint cimport int32_t, int64_t
 from cython.operator cimport dereference as dref
 from libcpp.vector cimport vector
 from libcpp.map cimport map
@@ -84,7 +85,7 @@ cdef class MISE:
                     assert(self.grid_points.size() == vec_to_idx(Vector3D(i, j, k), resolution_0 + 1))
                     self.add_grid_point(loc)
 
-    def update(self, long[:, :] points, double[:] values):
+    def update(self, int64_t[:, :] points, double[:] values):
         """Update points and set their values. Also determine all active voxels and subdivide them."""
         assert(points.shape[0] == values.shape[0])
         assert(points.shape[1] == 3)
@@ -119,7 +120,7 @@ cdef class MISE:
 
         # Convert to numpy
         points_np = np.zeros((points.size(), 3), dtype=np.int64)
-        cdef long[:, :] points_view = points_np
+        cdef int64_t[:, :] points_view = points_np
         for i in range(points.size()):
             points_view[i, 0] = points[i].x
             points_view[i, 1] = points[i].y

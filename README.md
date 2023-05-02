@@ -9,7 +9,7 @@ Official Repository for CVPR 2023 paper [*Vid2Avatar: 3D Avatar Reconstruction f
 ## Getting Started
 * Clone this repo: `git clone https://github.com/MoyGcc/vid2avatar`
 * Create a python virtual environment and activate. `conda create -n v2a python=3.7` and `conda activate v2a`
-* Install dependenices. `cd vid2avatar`, `pip install -r requirement.txt` and `python setup.py develop`
+* Install dependenices. `cd vid2avatar`, `pip install -r requirement.txt` and `cd code; python setup.py develop`
 * Install [Kaolin](https://kaolin.readthedocs.io/en/v0.10.0/notes/installation.html). We use version 0.10.0.
 * Download [SMPL model](https://smpl.is.tue.mpg.de/download.php) (1.0.0 for Python 2.7 (10 shape PCs)) and move them to the corresponding places:
 ```

@@ -51,6 +51,10 @@ python vis.py --mode {MODE} --path {PATH}
 * Run preprocessing: `cd preprocessing` and `bash run_preprocessing.sh`. The processed data will be stored in `data/`. The intermediate outputs of the preprocessing can be found at `preprocessing/raw_data/{SEQUENCE_NAME}/`
 * Launch training and test in the same way as above. The `metainfo` in the data config file `/code/confs/dataset/video.yaml` should be changed according to the custom video.
 
+<p align="center">
+  <img src="assets/roger.gif" width="240" height="270"/>  <img src="assets/exstrimalik.gif" width="240" height="270"/> <img src="assets/martial.gif" width="240" height="270"/>
+</p>
+
 ## Acknowledgement
 We have used codes from other great research work, including [VolSDF](https://github.com/lioryariv/volsdf), [NeRF++](https://github.com/Kai-46/nerfplusplus), [SMPL-X](https://github.com/vchoutas/smplx), [Anim-NeRF](https://github.com/JanaldoChen/Anim-NeRF), [I M Avatar](https://github.com/zhengyuf/IMavatar) and [SNARF](https://github.com/xuchen-ethz/snarf). We sincerely thank the authors for their awesome work! We also thank the authors of [ICON](https://github.com/YuliangXiu/ICON) and [SelfRecon](https://github.com/jby1993/SelfReconCode) for discussing experiment.
 

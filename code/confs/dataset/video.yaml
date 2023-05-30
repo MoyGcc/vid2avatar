@@ -1,6 +1,6 @@
 metainfo:
     gender: 'male'
-    data_dir : parkinglot/
+    data_dir : /media/AI/Common/Recon3D/v2a/data/parkinglot
     subject: "parkinglot"
     start_frame: 0
     end_frame: 42

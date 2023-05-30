@@ -13,10 +13,12 @@ class Dataset(torch.utils.data.Dataset):
         root = hydra.utils.to_absolute_path(root)
 
         self.start_frame = metainfo.start_frame
-        self.end_frame = metainfo.end_frame 
+        self.end_frame = metainfo.end_frame
         self.skip_step = 1
         self.images, self.img_sizes = [], []
-        self.training_indices = list(range(metainfo.start_frame, metainfo.end_frame, self.skip_step))
+        self.training_indices = list(
+            range(metainfo.start_frame, metainfo.end_frame, self.skip_step)
+        )
 
         # images
         img_dir = os.path.join(root, "image")
@@ -32,13 +34,23 @@ class Dataset(torch.utils.data.Dataset):
         self.mask_paths = sorted(glob.glob(f"{mask_dir}/*.png"))
         self.mask_paths = [self.mask_paths[i] for i in self.training_indices]
 
-        self.shape = np.load(os.path.join(root, "mean_shape.npy"))
-        self.poses = np.load(os.path.join(root, 'poses.npy'))[self.training_indices]
-        self.trans = np.load(os.path.join(root, 'normalize_trans.npy'))[self.training_indices]
+        self.shape = np.zeros_like(np.load(os.path.join(root, "mean_shape.npy")))
+        self.poses = np.zeros_like(
+            np.load(os.path.join(root, "poses.npy"))[self.training_indices]
+        )
+        self.trans = np.zeros_like(
+            np.load(os.path.join(root, "normalize_trans.npy"))[self.training_indices]
+        )
         # cameras
         camera_dict = np.load(os.path.join(root, "cameras_normalize.npz"))
-        scale_mats = [camera_dict['scale_mat_%d' % idx].astype(np.float32) for idx in self.training_indices]
-        world_mats = [camera_dict['world_mat_%d' % idx].astype(np.float32) for idx in self.training_indices]
+        scale_mats = [
+            camera_dict["scale_mat_%d" % idx].astype(np.float32)
+            for idx in self.training_indices
+        ]
+        world_mats = [
+            camera_dict["world_mat_%d" % idx].astype(np.float32)
+            for idx in self.training_indices
+        ]
 
         self.scale = 1 / scale_mats[0][0, 0]
 
@@ -72,11 +84,11 @@ class Dataset(torch.utils.data.Dataset):
 
         img_size = self.img_size
 
-        uv = np.mgrid[:img_size[0], :img_size[1]].astype(np.int32)
+        uv = np.mgrid[: img_size[0], : img_size[1]].astype(np.int32)
         uv = np.flip(uv, axis=0).copy().transpose(1, 2, 0).astype(np.float32)
 
         smpl_params = torch.zeros([86]).float()
-        smpl_params[0] = torch.from_numpy(np.asarray(self.scale)).float() 
+        smpl_params[0] = torch.from_numpy(np.asarray(self.scale)).float()
 
         smpl_params[1:4] = torch.from_numpy(self.trans[idx]).float()
         smpl_params[4:76] = torch.from_numpy(self.poses[idx]).float()
@@ -89,14 +101,16 @@ class Dataset(torch.utils.data.Dataset):
                 "object_mask": mask,
             }
 
-            samples, index_outside = utils.weighted_sampling(data, img_size, self.num_sample)
+            samples, index_outside = utils.weighted_sampling(
+                data, img_size, self.num_sample
+            )
             inputs = {
                 "uv": samples["uv"].astype(np.float32),
                 "intrinsics": self.intrinsics_all[idx],
                 "pose": self.pose_all[idx],
                 "smpl_params": smpl_params,
-                'index_outside': index_outside,
-                "idx": idx
+                "index_outside": index_outside,
+                "idx": idx,
             }
             images = {"rgb": samples["rgb"].astype(np.float32)}
             return inputs, images
@@ -106,13 +120,14 @@ class Dataset(torch.utils.data.Dataset):
                 "intrinsics": self.intrinsics_all[idx],
                 "pose": self.pose_all[idx],
                 "smpl_params": smpl_params,
-                "idx": idx
+                "idx": idx,
             }
             images = {
                 "rgb": img.reshape(-1, 3).astype(np.float32),
-                "img_size": self.img_size
+                "img_size": self.img_size,
             }
             return inputs, images
+
 
 class ValDataset(torch.utils.data.Dataset):
     def __init__(self, metainfo, split):
@@ -126,25 +141,26 @@ class ValDataset(torch.utils.data.Dataset):
         return 1
 
     def __getitem__(self, idx):
-        image_id = int(np.random.choice(len(self.dataset), 1))  
+        image_id = int(np.random.choice(len(self.dataset), 1))
         self.data = self.dataset[image_id]
         inputs, images = self.data
 
         inputs = {
             "uv": inputs["uv"],
-            "intrinsics": inputs['intrinsics'],
-            "pose": inputs['pose'],
+            "intrinsics": inputs["intrinsics"],
+            "pose": inputs["pose"],
             "smpl_params": inputs["smpl_params"],
-            'image_id': image_id,
-            "idx": inputs['idx']
+            "image_id": image_id,
+            "idx": inputs["idx"],
         }
         images = {
             "rgb": images["rgb"],
             "img_size": images["img_size"],
-            'pixel_per_batch': self.pixel_per_batch,
-            'total_pixels': self.total_pixels
+            "pixel_per_batch": self.pixel_per_batch,
+            "total_pixels": self.total_pixels,
         }
         return inputs, images
+
 
 class TestDataset(torch.utils.data.Dataset):
     def __init__(self, metainfo, split):
@@ -154,6 +170,7 @@ class TestDataset(torch.utils.data.Dataset):
 
         self.total_pixels = np.prod(self.img_size)
         self.pixel_per_batch = split.pixel_per_batch
+
     def __len__(self):
         return len(self.dataset)
 
@@ -163,13 +180,10 @@ class TestDataset(torch.utils.data.Dataset):
         inputs, images = data
         inputs = {
             "uv": inputs["uv"],
-            "intrinsics": inputs['intrinsics'],
-            "pose": inputs['pose'],
+            "intrinsics": inputs["intrinsics"],
+            "pose": inputs["pose"],
             "smpl_params": inputs["smpl_params"],
-            "idx": inputs['idx']
+            "idx": inputs["idx"],
         }
-        images = {
-            "rgb": images["rgb"],
-            "img_size": images["img_size"]
-        }
+        images = {"rgb": images["rgb"], "img_size": images["img_size"]}
         return inputs, images, self.pixel_per_batch, self.total_pixels, idx

@@ -70,7 +70,7 @@ class V2AModel(pl.LightningModule):
         body_model_params["body_pose"] = torch.zeros_like(
             torch.tensor(
                 np.load(os.path.join(data_root, "poses.npy"))[self.training_indices][
-                    :, :3
+                    :, 3:
                 ],
                 dtype=torch.float32,
             )

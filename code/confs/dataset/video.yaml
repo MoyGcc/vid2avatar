@@ -1,10 +1,13 @@
 metainfo:
     gender: 'male'
-    data_dir : /media/AI/Common/Recon3D/v2a/data/parkinglot
-    subject: "parkinglot"
+    data_dir : /media/AI/liam/v2a/zara
+    subject: "zara"
     start_frame: 0
     end_frame: 42
-
+    camera_pos_path: /media/AI/liam/v2a/zara/cam/EOT_ascii_Trans.txt
+    camera_rotate_path: /media/AI/liam/v2a/zara/cam/EOT_ascii_Rotate.txt
+    start_index: 4200
+    
 train:
     type: "Video"
     batch_size: 1

@@ -6,6 +6,8 @@ import numpy as np
 import torch
 from lib.utils import utils
 
+os.environ["OPENCV_IO_ENABLE_OPENEXR"] = "1"
+
 
 class Dataset(torch.utils.data.Dataset):
     def __init__(self, metainfo, split):
@@ -22,11 +24,11 @@ class Dataset(torch.utils.data.Dataset):
 
         # images
         img_dir = os.path.join(root, "image")
-        self.img_paths = sorted(glob.glob(f"{img_dir}/*.png"))
+        self.img_paths = sorted(glob.glob(f"{img_dir}/*.exr"))
 
         # only store the image paths to avoid OOM
         self.img_paths = [self.img_paths[i] for i in self.training_indices]
-        self.img_size = cv2.imread(self.img_paths[0]).shape[:2]
+        self.img_size = utils.read_image(self.img_paths[0]).shape[:2]
         self.n_images = len(self.img_paths)
 
         # coarse projected SMPL masks, only for sampling
@@ -34,7 +36,7 @@ class Dataset(torch.utils.data.Dataset):
         self.mask_paths = sorted(glob.glob(f"{mask_dir}/*.png"))
         self.mask_paths = [self.mask_paths[i] for i in self.training_indices]
 
-        self.shape = np.zeros_like(np.load(os.path.join(root, "mean_shape.npy")))
+        self.shape = np.load(os.path.join(root, "mean_shape.npy"))
         self.poses = np.zeros_like(
             np.load(os.path.join(root, "poses.npy"))[self.training_indices]
         )
@@ -42,6 +44,14 @@ class Dataset(torch.utils.data.Dataset):
             np.load(os.path.join(root, "normalize_trans.npy"))[self.training_indices]
         )
         # cameras
+        start_index = metainfo.start_index
+        image_indices = [start_index + i * 3 for i in range(0, self.n_images)]
+
+        self.camera_pos = utils.load_pos_init(metainfo.camera_pos_path, image_indices)
+        self.camera_rot = utils.load_rotate_init(
+            metainfo.camera_rotate_path, image_indices
+        )
+
         camera_dict = np.load(os.path.join(root, "cameras_normalize.npz"))
         scale_mats = [
             camera_dict["scale_mat_%d" % idx].astype(np.float32)
@@ -73,10 +83,8 @@ class Dataset(torch.utils.data.Dataset):
 
     def __getitem__(self, idx):
         # normalize RGB
-        img = cv2.imread(self.img_paths[idx])
-        # preprocess: BGR -> RGB -> Normalize
-
-        img = img[:, :, ::-1] / 255
+        img = utils.read_image(self.img_paths[idx])
+        img = utils.clip_and_convert_rgb_to_srgb(img)
 
         mask = cv2.imread(self.mask_paths[idx])
         # preprocess: BGR -> Gray -> Mask
@@ -108,9 +116,12 @@ class Dataset(torch.utils.data.Dataset):
                 "uv": samples["uv"].astype(np.float32),
                 "intrinsics": self.intrinsics_all[idx],
                 "pose": self.pose_all[idx],
+                "camera_pos": self.camera_pos[idx],
+                "camera_rot": self.camera_rot[idx],
                 "smpl_params": smpl_params,
                 "index_outside": index_outside,
                 "idx": idx,
+                "img_size": self.img_size,
             }
             images = {"rgb": samples["rgb"].astype(np.float32)}
             return inputs, images
@@ -119,8 +130,11 @@ class Dataset(torch.utils.data.Dataset):
                 "uv": uv.reshape(-1, 2).astype(np.float32),
                 "intrinsics": self.intrinsics_all[idx],
                 "pose": self.pose_all[idx],
+                "camera_pos": self.camera_pos[idx],
+                "camera_rot": self.camera_rot[idx],
                 "smpl_params": smpl_params,
                 "idx": idx,
+                "img_size": self.img_size,
             }
             images = {
                 "rgb": img.reshape(-1, 3).astype(np.float32),

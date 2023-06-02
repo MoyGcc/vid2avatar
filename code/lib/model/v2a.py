@@ -131,20 +131,18 @@ class V2A(nn.Module):
             if input["current_epoch"] < 20 or input["current_epoch"] % 20 == 0:
                 cond = {"smpl": smpl_pose[:, 3:] * 0.0}
 
-        ray_dirs_old, cam_loc_old = utils.get_camera_params(uv, pose, intrinsics)
-        camera_pos = input["camera_pos"]
-        camera_rot = input["camera_rot"]
-        ray_dirs, cam_loc = utils.get_camera_params_vr_camera(
-            uv, camera_pos=camera_pos, camera_rot=camera_rot
-        )
+        ray_dirs, camera_loc = utils.get_camera_params(uv, pose, intrinsics)
+        # camera_loc = input["camera_pos"].to(torch.float32)
+        # camera_rot = input["camera_rot"].to(torch.float32)
+        # ray_dirs = utils.get_camera_params_vr_camera(uv, camera_rot=camera_rot)
         batch_size, num_pixels, _ = ray_dirs.shape
 
-        cam_loc = cam_loc.unsqueeze(1).repeat(1, num_pixels, 1).reshape(-1, 3)
+        camera_loc = camera_loc.unsqueeze(1).repeat(1, num_pixels, 1).reshape(-1, 3)
         ray_dirs = ray_dirs.reshape(-1, 3)
 
         z_vals, _ = self.ray_sampler.get_z_vals(
             ray_dirs,
-            cam_loc,
+            camera_loc,
             self,
             cond,
             smpl_tfs,
@@ -157,7 +155,7 @@ class V2A(nn.Module):
         z_vals = z_vals[:, :-1]
         N_samples = z_vals.shape[1]
 
-        points = cam_loc.unsqueeze(1) + z_vals.unsqueeze(2) * ray_dirs.unsqueeze(1)
+        points = camera_loc.unsqueeze(1) + z_vals.unsqueeze(2) * ray_dirs.unsqueeze(1)
         points_flat = points.reshape(-1, 3)
 
         dirs = ray_dirs.unsqueeze(1).repeat(1, N_samples, 1)
@@ -239,7 +237,7 @@ class V2A(nn.Module):
             )  # 1--->0
 
             bg_dirs = ray_dirs.unsqueeze(1).repeat(1, N_bg_samples, 1)
-            bg_locs = cam_loc.unsqueeze(1).repeat(1, N_bg_samples, 1)
+            bg_locs = camera_loc.unsqueeze(1).repeat(1, N_bg_samples, 1)
 
             bg_points = self.depth2pts_outside(
                 bg_locs, bg_dirs, z_vals_bg

@@ -24,7 +24,7 @@ class Dataset(torch.utils.data.Dataset):
 
         # images
         img_dir = os.path.join(root, "image")
-        self.img_paths = sorted(glob.glob(f"{img_dir}/*.exr"))
+        self.img_paths = sorted(glob.glob(f"{img_dir}/*.png"))
 
         # only store the image paths to avoid OOM
         self.img_paths = [self.img_paths[i] for i in self.training_indices]

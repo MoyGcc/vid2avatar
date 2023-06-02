@@ -106,13 +106,13 @@ def get_camera_params(uv, pose, intrinsics):
     return ray_dirs, cam_loc
 
 
-def get_camera_params_vr_camera(uv, camera_pos, camera_rot):
+def get_camera_params_vr_camera(uv, camera_rot):
     long, lat = equirect_to_long_lat(uv)
-    points = long_lat_to_point(long, lat)
-    points = coord_z_up_to_y_up_batch(points)
-    ray_dirs = coord_camera_to_world_torch(points, R=camera_rot, T=camera_pos)
+    ray_dirs = long_lat_to_point(long, lat)
+    ray_dirs = coord_z_up_to_y_up_batch(ray_dirs)
+    ray_dirs = rotate_camera_to_world(ray_dirs, R=camera_rot)
     ray_dirs = F.normalize(ray_dirs, dim=-1)
-    return ray_dirs, camera_pos
+    return ray_dirs
 
 
 def lift(x, y, z, intrinsics):
@@ -406,18 +406,14 @@ def coord_camera_to_world(points, R, T):
 
 
 # TODO merge with numpy version
-def coord_camera_to_world_torch(points, R, T):
+def rotate_camera_to_world(points, R):
     """
     points: tensor (B,N,3)
     R: tensor (B,3,3)
     T: tensor (B,3)
     """
     R = transforms.euler_angles_to_matrix(R, "ZXY")
-    R = R.to(torch.float32)
-    R = R.transpose(1, 2)
-    T = T.unsqueeze(1)
-    points = torch.bmm(points, R)
-    points = points + T
+    points = torch.bmm(R, points.transpose(1, 2)).transpose(1, 2)
     return points
 
 

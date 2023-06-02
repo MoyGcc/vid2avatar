@@ -113,10 +113,10 @@ class V2A(nn.Module):
         pose = input["pose"]
         uv = input["uv"]
 
-        height, width = input["img_size"]
-        u = (uv[:, :, 0] / width) - 1  # [-1, 0]
-        v = (uv[:, :, 1] / height) * 2 - 1  # [-1, 1]
-        uv = torch.stack([u, v], dim=-1)
+        # height, width = input["img_size"]
+        # u = (uv[:, :, 0] / width) - 1  # [-1, 0]
+        # v = (uv[:, :, 1] / height) * 2 - 1  # [-1, 1]
+        # uv = torch.stack([u, v], dim=-1)
 
         scale = input["smpl_params"][:, 0]
         smpl_pose = input["smpl_pose"]

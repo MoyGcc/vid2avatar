@@ -83,8 +83,13 @@ class Dataset(torch.utils.data.Dataset):
 
     def __getitem__(self, idx):
         # normalize RGB
-        img = utils.read_image(self.img_paths[idx])
-        img = utils.clip_and_convert_rgb_to_srgb(img)
+        img = cv2.imread(self.img_paths[idx])
+        # preprocess: BGR -> RGB -> Normalize
+
+        img = img[:, :, ::-1] / 255
+
+        # img = utils.read_image(self.img_paths[idx])
+        # img = utils.clip_and_convert_rgb_to_srgb(img)
 
         mask = cv2.imread(self.mask_paths[idx])
         # preprocess: BGR -> Gray -> Mask

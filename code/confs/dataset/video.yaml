@@ -1,7 +1,7 @@
 metainfo:
-    gender: 'male'
-    data_dir : parkinglot/
-    subject: "parkinglot"
+    gender: 'female'
+    data_dir : data/
+    subject: "data"
     start_frame: 0
     end_frame: 42
 

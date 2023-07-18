@@ -1,5 +1,5 @@
 # Vid2Avatar: 3D Avatar Reconstruction from Videos in the Wild via Self-supervised Scene Decomposition
-## [Paper](https://arxiv.org/abs/2302.11566) | [Video Youtube](https://youtu.be/EGi47YeIeGQ) | [Project Page](https://moygcc.github.io/vid2avatar/)
+## [Paper](https://arxiv.org/abs/2302.11566) | [Video Youtube](https://youtu.be/EGi47YeIeGQ) | [Project Page](https://moygcc.github.io/vid2avatar/) | [SynWild Data](https://synwild.ait.ethz.ch/)
 
 
 Official Repository for CVPR 2023 paper [*Vid2Avatar: 3D Avatar Reconstruction from Videos in the Wild via Self-supervised Scene Decomposition*](https://arxiv.org/abs/2302.11566). 

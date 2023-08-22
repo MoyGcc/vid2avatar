@@ -31,17 +31,20 @@ class V2AModel(pl.LightningModule):
             "mean_shape.npy",
         )
         self.gender = opt.dataset.metainfo.gender
-        self.model = V2A(opt.model, self.betas_path, self.gender, num_training_frames)
+        self.model = V2A(opt.model, self.betas_path,
+                         self.gender, num_training_frames)
         self.start_frame = opt.dataset.metainfo.start_frame
         self.end_frame = opt.dataset.metainfo.end_frame
         self.training_modules = ["model"]
 
         self.training_indices = list(range(self.start_frame, self.end_frame))
-        self.body_model_params = BodyModelParams(num_training_frames, model_type="smpl")
+        self.body_model_params = BodyModelParams(
+            num_training_frames, model_type="smpl")
         self.load_body_model_params()
         optim_params = self.body_model_params.param_names
         for param_name in optim_params:
-            self.body_model_params.set_requires_grad(param_name, requires_grad=True)
+            self.body_model_params.set_requires_grad(
+                param_name, requires_grad=True)
         self.training_modules += ["body_model_params"]
 
         self.loss = Loss(opt.model.loss)
@@ -57,33 +60,36 @@ class V2AModel(pl.LightningModule):
             np.load(os.path.join(data_root, "mean_shape.npy"))[None],
             dtype=torch.float32,
         )
-        # body_model_params['global_orient'] = torch.tensor(np.load(os.path.join(data_root, 'poses.npy'))[self.training_indices][:, :3], dtype=torch.float32)
-        body_model_params["global_orient"] = torch.zeros_like(
-            torch.tensor(
-                np.load(os.path.join(data_root, "poses.npy"))[self.training_indices][
-                    :, :3
-                ],
-                dtype=torch.float32,
-            )
-        )
-        # body_model_params['body_pose'] = torch.tensor(np.load(os.path.join(data_root, 'poses.npy'))[self.training_indices] [:, 3:], dtype=torch.float32)
-        body_model_params["body_pose"] = torch.zeros_like(
-            torch.tensor(
-                np.load(os.path.join(data_root, "poses.npy"))[self.training_indices][
-                    :, 3:
-                ],
-                dtype=torch.float32,
-            )
-        )
-        # body_model_params['transl'] = torch.tensor(np.load(os.path.join(data_root, 'normalize_trans.npy'))[self.training_indices], dtype=torch.float32)
-        body_model_params["transl"] = torch.zeros_like(
-            torch.tensor(
-                np.load(os.path.join(data_root, "normalize_trans.npy"))[
-                    self.training_indices
-                ],
-                dtype=torch.float32,
-            )
-        )
+        body_model_params['global_orient'] = torch.tensor(np.load(os.path.join(
+            data_root, 'poses.npy'))[self.training_indices][:, :3], dtype=torch.float32)
+        # body_model_params["global_orient"] = torch.zeros_like(
+        #     torch.tensor(
+        #         np.load(os.path.join(data_root, "poses.npy"))[self.training_indices][
+        #             :, :3
+        #         ],
+        #         dtype=torch.float32,
+        #     )
+        # )
+        body_model_params['body_pose'] = torch.tensor(np.load(os.path.join(
+            data_root, 'poses.npy'))[self.training_indices][:, 3:], dtype=torch.float32)
+        # body_model_params["body_pose"] = torch.zeros_like(
+        #     torch.tensor(
+        #         np.load(os.path.join(data_root, "poses.npy"))[self.training_indices][
+        #             :, 3:
+        #         ],
+        #         dtype=torch.float32,
+        #     )
+        # )
+        body_model_params['transl'] = torch.tensor(np.load(os.path.join(
+            data_root, 'normalize_trans.npy'))[self.training_indices], dtype=torch.float32)
+        # body_model_params["transl"] = torch.zeros_like(
+        #     torch.tensor(
+        #         np.load(os.path.join(data_root, "normalize_trans.npy"))[
+        #             self.training_indices
+        #         ],
+        #         dtype=torch.float32,
+        #     )
+        # )
 
         for param_name in body_model_params.keys():
             self.body_model_params.init_parameters(
@@ -100,7 +106,8 @@ class V2AModel(pl.LightningModule):
                 "lr": self.opt.model.learning_rate * 0.1,
             }
         )
-        self.optimizer = optim.Adam(params, lr=self.opt.model.learning_rate, eps=1e-8)
+        self.optimizer = optim.Adam(
+            params, lr=self.opt.model.learning_rate, eps=1e-8)
         self.scheduler = optim.lr_scheduler.MultiStepLR(
             self.optimizer,
             milestones=self.opt.model.sched_milestones,
@@ -115,7 +122,8 @@ class V2AModel(pl.LightningModule):
 
         body_model_params = self.body_model_params(batch_idx)
         inputs["smpl_pose"] = torch.cat(
-            (body_model_params["global_orient"], body_model_params["body_pose"]), dim=1
+            (body_model_params["global_orient"],
+             body_model_params["body_pose"]), dim=1
         )
         inputs["smpl_shape"] = body_model_params["betas"]
         inputs["smpl_trans"] = body_model_params["transl"]
@@ -155,7 +163,8 @@ class V2AModel(pl.LightningModule):
 
     def query_oc(self, x, cond):
         x = x.reshape(-1, 3)
-        mnfld_pred = self.model.implicit_network(x, cond)[:, :, 0].reshape(-1, 1)
+        mnfld_pred = self.model.implicit_network(
+            x, cond)[:, :, 0].reshape(-1, 1)
         return {"sdf": mnfld_pred}
 
     def query_wc(self, x):
@@ -178,7 +187,8 @@ class V2AModel(pl.LightningModule):
         verts = torch.tensor(verts).cuda().float()
         weights = self.model.deformer.query_weights(verts)
         verts_deformed = (
-            skinning(verts.unsqueeze(0), weights, smpl_tfs).data.cpu().numpy()[0]
+            skinning(verts.unsqueeze(0), weights,
+                     smpl_tfs).data.cpu().numpy()[0]
         )
         return verts_deformed
 
@@ -190,7 +200,8 @@ class V2AModel(pl.LightningModule):
 
         body_model_params = self.body_model_params(inputs["image_id"])
         inputs["smpl_pose"] = torch.cat(
-            (body_model_params["global_orient"], body_model_params["body_pose"]), dim=1
+            (body_model_params["global_orient"],
+             body_model_params["body_pose"]), dim=1
         )
         inputs["smpl_shape"] = body_model_params["betas"]
         inputs["smpl_trans"] = body_model_params["transl"]
@@ -203,7 +214,8 @@ class V2AModel(pl.LightningModule):
             res_up=3,
         )
 
-        mesh_canonical = trimesh.Trimesh(mesh_canonical.vertices, mesh_canonical.faces)
+        mesh_canonical = trimesh.Trimesh(
+            mesh_canonical.vertices, mesh_canonical.faces)
 
         output.update({"canonical_mesh": mesh_canonical})
 
@@ -235,7 +247,8 @@ class V2AModel(pl.LightningModule):
             )
         batch_size = targets["rgb"].shape[0]
 
-        model_outputs = utils.merge_output(res, targets["total_pixels"][0], batch_size)
+        model_outputs = utils.merge_output(
+            res, targets["total_pixels"][0], batch_size)
 
         output.update(
             {
@@ -254,16 +267,20 @@ class V2AModel(pl.LightningModule):
     def validation_epoch_end(self, outputs) -> None:
         img_size = outputs[0]["img_size"]
 
-        rgb_pred = torch.cat([output["rgb_values"] for output in outputs], dim=0)
+        rgb_pred = torch.cat([output["rgb_values"]
+                             for output in outputs], dim=0)
         rgb_pred = rgb_pred.reshape(*img_size, -1)
 
-        fg_rgb_pred = torch.cat([output["fg_rgb_values"] for output in outputs], dim=0)
+        fg_rgb_pred = torch.cat([output["fg_rgb_values"]
+                                for output in outputs], dim=0)
         fg_rgb_pred = fg_rgb_pred.reshape(*img_size, -1)
 
-        normal_pred = torch.cat([output["normal_values"] for output in outputs], dim=0)
+        normal_pred = torch.cat([output["normal_values"]
+                                for output in outputs], dim=0)
         normal_pred = (normal_pred.reshape(*img_size, -1) + 1) / 2
 
-        rgb_gt = torch.cat([output["rgb"] for output in outputs], dim=1).squeeze(0)
+        rgb_gt = torch.cat([output["rgb"]
+                           for output in outputs], dim=1).squeeze(0)
         rgb_gt = rgb_gt.reshape(*img_size, -1)
         if "normal" in outputs[0].keys():
             normal_gt = torch.cat(
@@ -291,7 +308,8 @@ class V2AModel(pl.LightningModule):
 
         cv2.imwrite(f"rendering/{self.current_epoch}.png", rgb[:, :, ::-1])
         cv2.imwrite(f"normal/{self.current_epoch}.png", normal[:, :, ::-1])
-        cv2.imwrite(f"fg_rendering/{self.current_epoch}.png", fg_rgb[:, :, ::-1])
+        cv2.imwrite(
+            f"fg_rendering/{self.current_epoch}.png", fg_rgb[:, :, ::-1])
 
     def test_step(self, batch, *args, **kwargs):
         inputs, targets, pixel_per_batch, total_pixels, idx = batch
@@ -310,10 +328,12 @@ class V2AModel(pl.LightningModule):
         )
         smpl_trans = body_model_params["transl"]
         smpl_pose = torch.cat(
-            (body_model_params["global_orient"], body_model_params["body_pose"]), dim=1
+            (body_model_params["global_orient"],
+             body_model_params["body_pose"]), dim=1
         )
 
-        smpl_outputs = self.model.smpl_server(scale, smpl_trans, smpl_pose, smpl_shape)
+        smpl_outputs = self.model.smpl_server(
+            scale, smpl_trans, smpl_pose, smpl_shape)
         smpl_tfs = smpl_outputs["smpl_tfs"]
         cond = {"smpl": smpl_pose[:, 3:] / np.pi}
 
@@ -338,15 +358,19 @@ class V2AModel(pl.LightningModule):
         os.makedirs("test_fg_rendering", exist_ok=True)
         os.makedirs("test_normal", exist_ok=True)
         os.makedirs("test_mesh", exist_ok=True)
+        os.makedirs("test_depth", exist_ok=True)
 
-        mesh_canonical.export(f"test_mesh/{int(idx.cpu().numpy()):04d}_canonical.ply")
-        mesh_deformed.export(f"test_mesh/{int(idx.cpu().numpy()):04d}_deformed.ply")
+        mesh_canonical.export(
+            f"test_mesh/{int(idx.cpu().numpy()):04d}_canonical.ply")
+        mesh_deformed.export(
+            f"test_mesh/{int(idx.cpu().numpy()):04d}_deformed.ply")
         self.model.deformer = SMPLDeformer(
             betas=np.load(self.betas_path), gender=self.gender
         )
         for i in range(num_splits):
             indices = list(
-                range(i * pixel_per_batch, min((i + 1) * pixel_per_batch, total_pixels))
+                range(i * pixel_per_batch, min((i + 1)
+                      * pixel_per_batch, total_pixels))
             )
             batch_inputs = {
                 "uv": inputs["uv"][:, indices],
@@ -390,25 +414,30 @@ class V2AModel(pl.LightningModule):
                     "fg_rgb_values": model_outputs["fg_rgb_values"].detach().clone(),
                     "normal_values": model_outputs["normal_values"].detach().clone(),
                     "acc_map": model_outputs["acc_map"].detach().clone(),
+                    "depth": model_outputs["depth"].detach().clone(),
                     **batch_targets,
                 }
             )
 
         img_size = results[0]["img_size"]
-        rgb_pred = torch.cat([result["rgb_values"] for result in results], dim=0)
+        rgb_pred = torch.cat([result["rgb_values"]
+                             for result in results], dim=0)
         rgb_pred = rgb_pred.reshape(*img_size, -1)
 
-        fg_rgb_pred = torch.cat([result["fg_rgb_values"] for result in results], dim=0)
+        fg_rgb_pred = torch.cat([result["fg_rgb_values"]
+                                for result in results], dim=0)
         fg_rgb_pred = fg_rgb_pred.reshape(*img_size, -1)
 
-        normal_pred = torch.cat([result["normal_values"] for result in results], dim=0)
+        normal_pred = torch.cat([result["normal_values"]
+                                for result in results], dim=0)
         normal_pred = (normal_pred.reshape(*img_size, -1) + 1) / 2
 
         pred_mask = torch.cat([result["acc_map"] for result in results], dim=0)
         pred_mask = pred_mask.reshape(*img_size, -1)
 
         if results[0]["rgb"] is not None:
-            rgb_gt = torch.cat([result["rgb"] for result in results], dim=1).squeeze(0)
+            rgb_gt = torch.cat([result["rgb"]
+                               for result in results], dim=1).squeeze(0)
             rgb_gt = rgb_gt.reshape(*img_size, -1)
             rgb = torch.cat([rgb_gt, rgb_pred], dim=0).cpu().numpy()
         else:
@@ -429,11 +458,29 @@ class V2AModel(pl.LightningModule):
 
         normal = (normal * 255).astype(np.uint8)
 
+        # depth map
+        depth_pred = torch.cat([result["depth"]
+                                for result in results], dim=0)
+        depth_pred = depth_pred.reshape(*img_size, -1)
+        depth = torch.cat([depth_pred], dim=0).cpu().numpy()
+
+        depth = depth / depth.max()  # 0 ~ 1
+        # depth = depth.clip(0.75, 1.0)  # 0.75 ~ 1
+        # depth = depth * 4 - 3  # 0 ~ 1
+        depth = depth * 255
+        depth = depth.astype(np.uint8)
+
+        # depth = cv2.applyColorMap(depth, cv2.COLORMAP_JET)
+        #
+
         cv2.imwrite(
             f"test_mask/{int(idx.cpu().numpy()):04d}.png", pred_mask.cpu().numpy() * 255
         )
-        cv2.imwrite(f"test_rendering/{int(idx.cpu().numpy()):04d}.png", rgb[:, :, ::-1])
-        cv2.imwrite(f"test_normal/{int(idx.cpu().numpy()):04d}.png", normal[:, :, ::-1])
         cv2.imwrite(
-            f"test_fg_rendering/{int(idx.cpu().numpy()):04d}.png", fg_rgb[:, :, ::-1]
-        )
+            f"test_rendering/{int(idx.cpu().numpy()):04d}.png", rgb[:, :, ::-1])
+        cv2.imwrite(
+            f"test_normal/{int(idx.cpu().numpy()):04d}.png", normal[:, :, ::-1])
+        cv2.imwrite(
+            f"test_fg_rendering/{int(idx.cpu().numpy()):04d}.png", fg_rgb)
+        cv2.imwrite(
+            f"test_depth/{int(idx.cpu().numpy()):04d}.png", depth[:, :, ::-1])

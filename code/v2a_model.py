@@ -37,6 +37,7 @@ class V2AModel(pl.LightningModule):
 
         self.training_indices = list(range(self.start_frame, self.end_frame))
         self.body_model_params = BodyModelParams(num_training_frames, model_type="smpl")
+        # if self.training:
         self.load_body_model_params()
         optim_params = self.body_model_params.param_names
         for param_name in optim_params:
@@ -56,16 +57,19 @@ class V2AModel(pl.LightningModule):
             np.load(os.path.join(data_root, "mean_shape.npy"))[None],
             dtype=torch.float32,
         )
+        poses = np.load(os.path.join(data_root, "poses.npy"))
+        num_samples = poses.shape[0]
+        poses = poses.reshape(num_samples, -1)
         body_model_params["global_orient"] = torch.tensor(
-            np.load(os.path.join(data_root, "poses.npy"))[self.training_indices][:, :3],
+            poses[self.training_indices][:, :3],
             dtype=torch.float32,
         )
         body_model_params["body_pose"] = torch.tensor(
-            np.load(os.path.join(data_root, "poses.npy"))[self.training_indices][:, 3:],
+            poses[self.training_indices][:, 3:],
             dtype=torch.float32,
         )
         body_model_params["transl"] = torch.tensor(
-            np.load(os.path.join(data_root, "normalize_trans.npy"))[
+            np.load(os.path.join(data_root, "normalize_trans.npy")).squeeze()[
                 self.training_indices
             ],
             dtype=torch.float32,
@@ -295,6 +299,9 @@ class V2AModel(pl.LightningModule):
             else body_model_params["betas"].unsqueeze(0)
         )
         smpl_trans = body_model_params["transl"]
+        # body_model_params["global_orient"][:, :1] = (
+        #     body_model_params["global_orient"][:, :1] * -1
+        # )
         smpl_pose = torch.cat(
             (body_model_params["global_orient"], body_model_params["body_pose"]), dim=1
         )
@@ -336,8 +343,10 @@ class V2AModel(pl.LightningModule):
             )
             batch_inputs = {
                 "uv": inputs["uv"][:, indices],
-                "intrinsics": inputs["intrinsics"],
-                "pose": inputs["pose"],
+                # "intrinsics": inputs["intrinsics"],
+                # "pose": inputs["pose"],
+                "camera_poses": inputs["camera_poses"],
+                "camera_rotates": inputs["camera_rotates"],
                 "smpl_params": inputs["smpl_params"],
                 "smpl_pose": inputs["smpl_params"][:, 4:76],
                 "smpl_shape": inputs["smpl_params"][:, 76:],

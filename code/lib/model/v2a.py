@@ -109,9 +109,11 @@ class V2A(nn.Module):
     def forward(self, input):
         # Parse model input
         torch.set_grad_enabled(True)
-        intrinsics = input["intrinsics"]
-        pose = input["pose"]
+        # intrinsics = input["intrinsics"]
+        # pose = input["pose"]
         uv = input["uv"]
+        camera_pos = input["camera_poses"]
+        camera_rotate = input["camera_rotates"]
 
         scale = input["smpl_params"][:, 0]
         smpl_pose = input["smpl_pose"]
@@ -125,7 +127,8 @@ class V2A(nn.Module):
         if self.training:
             if input["current_epoch"] < 20 or input["current_epoch"] % 20 == 0:
                 cond = {"smpl": smpl_pose[:, 3:] * 0.0}
-        ray_dirs, cam_loc = utils.get_camera_params(uv, pose, intrinsics)
+        # ray_dirs, cam_loc = utils.get_camera_params(uv, pose, intrinsics)
+        ray_dirs, cam_loc = utils.get_camera_params_equirect(uv, camera_pos=camera_pos, camera_rotate=camera_rotate)
         batch_size, num_pixels, _ = ray_dirs.shape
 
         cam_loc = cam_loc.unsqueeze(1).repeat(1, num_pixels, 1).reshape(-1, 3)

@@ -1,9 +1,9 @@
 metainfo:
     gender: 'female'
-    data_dir : data/
-    subject: "data"
+    data_dir : data_equi/
+    subject: "data_equi"
     start_frame: 0
-    end_frame: 42
+    end_frame: 41
 
 train:
     type: "Video"

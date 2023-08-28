@@ -7,6 +7,39 @@ import torch
 from lib.utils import utils
 
 
+def flip_y_2d_points(points, y_range=[-1.0, 1.0]):
+    """Flip along y values of 2d points array.
+
+    Args:
+        points (torch.Tensor or np.ndarray): N-array 2d points, size of last dimension is 2.
+        y_range (list, optional): Min/max of y values. Defaults to [-1.0, 1.0].
+
+    Raises:
+        TypeError: Only numpy ndarray and torch Tensor are supported.
+
+    Returns:
+        new_points: flipped points.
+    """
+    y_min = y_range[0]
+    y_max = y_range[1]
+
+    if isinstance(points, torch.Tensor):
+        x = points[..., 0]
+        y = points[..., 1]
+        new_y = -y + y_min + y_max
+        new_points = torch.stack([x, new_y], dim=-1)
+    elif isinstance(points, np.ndarray):
+        x = points[..., 0]
+        y = points[..., 1]
+        new_y = -y + y_min + y_max
+        new_points = np.stack([x, new_y], axis=-1)
+    else:
+        raise TypeError(
+            "Unsupported data type. Only numpy ndarray and torch Tensor are supported."
+        )
+    return new_points
+
+
 class Dataset(torch.utils.data.Dataset):
     def __init__(self, metainfo, split):
         root = os.path.join(".", metainfo.data_dir)
@@ -40,27 +73,33 @@ class Dataset(torch.utils.data.Dataset):
             self.training_indices
         ]
         # cameras
-        camera_dict = np.load(os.path.join(root, "cameras_normalize.npz"))
-        scale_mats = [
-            camera_dict["scale_mat_%d" % idx].astype(np.float32)
-            for idx in self.training_indices
-        ]
-        world_mats = [
-            camera_dict["world_mat_%d" % idx].astype(np.float32)
-            for idx in self.training_indices
-        ]
+        camera_poses = np.load(os.path.join(root, "camera_pos.npy"))
+        camera_rotates = np.load(os.path.join(root, "camera_rotate.npy"))
+        # camera_dict = np.load(os.path.join(root, "cameras_normalize.npz"))
+        # scale_mats = [
+        #     camera_dict["scale_mat_%d" % idx].astype(np.float32)
+        #     for idx in self.training_indices
+        # ]
+        # world_mats = [
+        #     camera_dict["world_mat_%d" % idx].astype(np.float32)
+        #     for idx in self.training_indices
+        # ]
 
-        self.scale = 1 / scale_mats[0][0, 0]
+        # self.scale = 1 / scale_mats[0][0, 0]
+        self.scale = 1
 
-        self.intrinsics_all = []
-        self.pose_all = []
-        for scale_mat, world_mat in zip(scale_mats, world_mats):
-            P = world_mat @ scale_mat
-            P = P[:3, :4]
-            intrinsics, pose = utils.load_K_Rt_from_P(None, P)
-            self.intrinsics_all.append(torch.from_numpy(intrinsics).float())
-            self.pose_all.append(torch.from_numpy(pose).float())
-        assert len(self.intrinsics_all) == len(self.pose_all)
+        self.camera_poses = torch.tensor(camera_poses, dtype=torch.float32)
+        self.camera_rotates = torch.tensor(camera_rotates, dtype=torch.float32)
+
+        # self.intrinsics_all = []
+        # self.pose_all = []
+        # for scale_mat, world_mat in zip(scale_mats, world_mats):
+        #     P = world_mat @ scale_mat
+        #     P = P[:3, :4]
+        #     intrinsics, pose = utils.load_K_Rt_from_P(None, P)
+        #     self.intrinsics_all.append(torch.from_numpy(intrinsics).float())
+        #     self.pose_all.append(torch.from_numpy(pose).float())
+        # assert len(self.intrinsics_all) == len(self.pose_all)
 
         # other properties
         self.num_sample = split.num_sample
@@ -82,14 +121,19 @@ class Dataset(torch.utils.data.Dataset):
 
         img_size = self.img_size
 
-        uv = np.mgrid[: img_size[0], : img_size[1]].astype(np.int32)
-        uv = np.flip(uv, axis=0).copy().transpose(1, 2, 0).astype(np.float32)
+        # uv = np.mgrid[: img_size[0], : img_size[1]].astype(np.int32)
+        # uv = np.flip(uv, axis=0).copy().transpose(1, 2, 0).astype(np.float32)
+
+        x = np.linspace(-0.5, 0.5, img_size[0], endpoint=False)
+        y = np.linspace(-0.5, 0.5, img_size[1], endpoint=False)
+        uv = np.stack(np.meshgrid(x, y, indexing="xy"), axis=-1)  # (h, w, 2)
+        uv = flip_y_2d_points(uv, y_range=[-0.5, 0.5])
 
         smpl_params = torch.zeros([86]).float()
         smpl_params[0] = torch.from_numpy(np.asarray(self.scale)).float()
 
         smpl_params[1:4] = torch.from_numpy(self.trans[idx]).float()
-        smpl_params[4:76] = torch.from_numpy(self.poses[idx]).float()
+        smpl_params[4:76] = torch.from_numpy(self.poses[idx]).reshape(-1).float()
         smpl_params[76:] = torch.from_numpy(self.shape).float()
 
         if self.num_sample > 0:
@@ -104,8 +148,10 @@ class Dataset(torch.utils.data.Dataset):
             )
             inputs = {
                 "uv": samples["uv"].astype(np.float32),
-                "intrinsics": self.intrinsics_all[idx],
-                "pose": self.pose_all[idx],
+                # "intrinsics": self.intrinsics_all[idx],
+                # "pose": self.pose_all[idx],
+                "camera_poses": self.camera_poses[idx],
+                "camera_rotates": self.camera_rotates[idx],
                 "smpl_params": smpl_params,
                 "index_outside": index_outside,
                 "idx": idx,
@@ -115,8 +161,10 @@ class Dataset(torch.utils.data.Dataset):
         else:
             inputs = {
                 "uv": uv.reshape(-1, 2).astype(np.float32),
-                "intrinsics": self.intrinsics_all[idx],
-                "pose": self.pose_all[idx],
+                # "intrinsics": self.intrinsics_all[idx],
+                # "pose": self.pose_all[idx],
+                "camera_poses": self.camera_poses[idx],
+                "camera_rotates": self.camera_rotates[idx],
                 "smpl_params": smpl_params,
                 "idx": idx,
             }
@@ -145,8 +193,10 @@ class ValDataset(torch.utils.data.Dataset):
 
         inputs = {
             "uv": inputs["uv"],
-            "intrinsics": inputs["intrinsics"],
-            "pose": inputs["pose"],
+            "camera_poses": inputs["camera_poses"],
+            "camera_rotates": inputs["camera_rotates"],
+            # "intrinsics": inputs["intrinsics"],
+            # "pose": inputs["pose"],
             "smpl_params": inputs["smpl_params"],
             "image_id": image_id,
             "idx": inputs["idx"],
@@ -178,8 +228,10 @@ class TestDataset(torch.utils.data.Dataset):
         inputs, images = data
         inputs = {
             "uv": inputs["uv"],
-            "intrinsics": inputs["intrinsics"],
-            "pose": inputs["pose"],
+            # "intrinsics": inputs["intrinsics"],
+            # "pose": inputs["pose"],
+            "camera_poses": inputs["camera_poses"],
+            "camera_rotates": inputs["camera_rotates"],
             "smpl_params": inputs["smpl_params"],
             "idx": inputs["idx"],
         }

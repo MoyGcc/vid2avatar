@@ -6,6 +6,7 @@ from pytorch_lightning.loggers import WandbLogger
 import os
 import glob
 
+
 @hydra.main(config_path="confs", config_name="base")
 def main(opt):
     pl.seed_everything(42)
@@ -15,7 +16,8 @@ def main(opt):
         dirpath="checkpoints/",
         filename="{epoch:04d}-{loss}",
         save_on_train_epoch_end=True,
-        save_last=True)
+        save_last=True,
+    )
     logger = WandbLogger(project=opt.project_name, name=f"{opt.exp}/{opt.run}")
 
     trainer = pl.Trainer(
@@ -26,7 +28,7 @@ def main(opt):
         check_val_every_n_epoch=50,
         logger=logger,
         log_every_n_steps=1,
-        num_sanity_val_steps=0
+        num_sanity_val_steps=0,
     )
 
     model = V2AModel(opt)
@@ -35,5 +37,6 @@ def main(opt):
 
     trainer.test(model, testset, ckpt_path=checkpoint)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

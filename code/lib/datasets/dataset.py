@@ -75,31 +75,12 @@ class Dataset(torch.utils.data.Dataset):
         # cameras
         camera_poses = np.load(os.path.join(root, "camera_pos.npy"))
         camera_rotates = np.load(os.path.join(root, "camera_rotate.npy"))
-        # camera_dict = np.load(os.path.join(root, "cameras_normalize.npz"))
-        # scale_mats = [
-        #     camera_dict["scale_mat_%d" % idx].astype(np.float32)
-        #     for idx in self.training_indices
-        # ]
-        # world_mats = [
-        #     camera_dict["world_mat_%d" % idx].astype(np.float32)
-        #     for idx in self.training_indices
-        # ]
 
         # self.scale = 1 / scale_mats[0][0, 0]
         self.scale = 1
 
         self.camera_poses = torch.tensor(camera_poses, dtype=torch.float32)
         self.camera_rotates = torch.tensor(camera_rotates, dtype=torch.float32)
-
-        # self.intrinsics_all = []
-        # self.pose_all = []
-        # for scale_mat, world_mat in zip(scale_mats, world_mats):
-        #     P = world_mat @ scale_mat
-        #     P = P[:3, :4]
-        #     intrinsics, pose = utils.load_K_Rt_from_P(None, P)
-        #     self.intrinsics_all.append(torch.from_numpy(intrinsics).float())
-        #     self.pose_all.append(torch.from_numpy(pose).float())
-        # assert len(self.intrinsics_all) == len(self.pose_all)
 
         # other properties
         self.num_sample = split.num_sample
@@ -117,12 +98,15 @@ class Dataset(torch.utils.data.Dataset):
 
         mask = cv2.imread(self.mask_paths[idx])
         # preprocess: BGR -> Gray -> Mask
-        mask = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY) > 0
+        mask = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
+        dilate_kernel = np.ones((20, 20), np.uint8)
+        mask_for_sampling = cv2.dilate(mask, dilate_kernel)
+
+        mask = mask > 0
+        mask_for_sampling = mask > 0
+        # mask = mask / 255.0
 
         img_size = self.img_size
-
-        # uv = np.mgrid[: img_size[0], : img_size[1]].astype(np.int32)
-        # uv = np.flip(uv, axis=0).copy().transpose(1, 2, 0).astype(np.float32)
 
         x = np.linspace(-0.5, 0.5, img_size[0], endpoint=False)
         y = np.linspace(-0.5, 0.5, img_size[1], endpoint=False)
@@ -140,7 +124,8 @@ class Dataset(torch.utils.data.Dataset):
             data = {
                 "rgb": img,
                 "uv": uv,
-                "object_mask": mask,
+                "object_mask": mask_for_sampling,
+                "mask": mask,
             }
 
             samples, index_outside = utils.weighted_sampling(
@@ -153,10 +138,13 @@ class Dataset(torch.utils.data.Dataset):
                 "camera_poses": self.camera_poses[idx],
                 "camera_rotates": self.camera_rotates[idx],
                 "smpl_params": smpl_params,
-                "index_outside": index_outside,
+                # "index_outside": index_outside,
                 "idx": idx,
             }
-            images = {"rgb": samples["rgb"].astype(np.float32)}
+            images = {
+                "rgb": samples["rgb"].astype(np.float32),
+                "mask": samples["mask"].astype(np.float32),
+            }
             return inputs, images
         else:
             inputs = {
@@ -171,6 +159,7 @@ class Dataset(torch.utils.data.Dataset):
             images = {
                 "rgb": img.reshape(-1, 3).astype(np.float32),
                 "img_size": self.img_size,
+                "mask": mask.reshape(-1).astype(np.float32),
             }
             return inputs, images
 
@@ -206,6 +195,7 @@ class ValDataset(torch.utils.data.Dataset):
             "img_size": images["img_size"],
             "pixel_per_batch": self.pixel_per_batch,
             "total_pixels": self.total_pixels,
+            "mask": images["mask"],
         }
         return inputs, images
 
@@ -235,5 +225,9 @@ class TestDataset(torch.utils.data.Dataset):
             "smpl_params": inputs["smpl_params"],
             "idx": inputs["idx"],
         }
-        images = {"rgb": images["rgb"], "img_size": images["img_size"]}
+        images = {
+            "rgb": images["rgb"],
+            "img_size": images["img_size"],
+            "mask": images["mask"],
+        }
         return inputs, images, self.pixel_per_batch, self.total_pixels, idx

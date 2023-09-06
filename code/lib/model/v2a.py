@@ -115,7 +115,7 @@ class V2A(nn.Module):
         camera_pos = input["camera_poses"]
         camera_rotate = input["camera_rotates"]
 
-        scale = input["smpl_params"][:, 0]
+        scale = input["smpl_params"][:, 0][:, None]
         smpl_pose = input["smpl_pose"]
         smpl_shape = input["smpl_shape"]
         smpl_trans = input["smpl_trans"]
@@ -127,8 +127,10 @@ class V2A(nn.Module):
         if self.training:
             if input["current_epoch"] < 20 or input["current_epoch"] % 20 == 0:
                 cond = {"smpl": smpl_pose[:, 3:] * 0.0}
-        # ray_dirs, cam_loc = utils.get_camera_params(uv, pose, intrinsics)
-        ray_dirs, cam_loc = utils.get_camera_params_equirect(uv, camera_pos=camera_pos, camera_rotate=camera_rotate)
+
+        ray_dirs, cam_loc = utils.get_camera_params_equirect(
+            uv, camera_pos=camera_pos, camera_rotate=camera_rotate
+        )
         batch_size, num_pixels, _ = ray_dirs.shape
 
         cam_loc = cam_loc.unsqueeze(1).repeat(1, num_pixels, 1).reshape(-1, 3)
@@ -272,7 +274,7 @@ class V2A(nn.Module):
                 "points": points,
                 "rgb_values": rgb_values,
                 "normal_values": normal_values,
-                "index_outside": input["index_outside"],
+                # "index_outside": input["index_outside"],
                 "index_off_surface": index_off_surface,
                 "index_in_surface": index_in_surface,
                 "acc_map": torch.sum(weights, -1),

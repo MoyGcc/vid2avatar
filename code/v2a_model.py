@@ -37,7 +37,6 @@ class V2AModel(pl.LightningModule):
 
         self.training_indices = list(range(self.start_frame, self.end_frame))
         self.body_model_params = BodyModelParams(num_training_frames, model_type="smpl")
-        # if self.training:
         self.load_body_model_params()
         optim_params = self.body_model_params.param_names
         for param_name in optim_params:
@@ -45,6 +44,7 @@ class V2AModel(pl.LightningModule):
         self.training_modules += ["body_model_params"]
 
         self.loss = Loss(opt.model.loss)
+        self.automatic_optimization = False
 
     def load_body_model_params(self):
         body_model_params = {
@@ -84,21 +84,29 @@ class V2AModel(pl.LightningModule):
         params = [
             {"params": self.model.parameters(), "lr": self.opt.model.learning_rate}
         ]
-        params.append(
+        body_params = [
             {
                 "params": self.body_model_params.parameters(),
-                "lr": self.opt.model.learning_rate * 0.1,
+                "lr": self.opt.model.body_param_learning_rate,
             }
-        )
-        self.optimizer = optim.Adam(params, lr=self.opt.model.learning_rate, eps=1e-8)
+        ]
+
+        optimizer = optim.Adam(params, lr=self.opt.model.learning_rate, eps=1e-8)
         self.scheduler = optim.lr_scheduler.MultiStepLR(
-            self.optimizer,
+            optimizer,
             milestones=self.opt.model.sched_milestones,
             gamma=self.opt.model.sched_factor,
         )
-        return [self.optimizer], [self.scheduler]
+
+        body_param_optimizer = optim.RMSprop(
+            body_params, lr=self.opt.model.body_param_learning_rate
+        )
+        return optimizer, body_param_optimizer
 
     def training_step(self, batch):
+        opt, opt_bp = self.optimizers()
+        opt.zero_grad()
+        opt_bp.zero_grad()
         inputs, targets = batch
 
         batch_idx = inputs["idx"]
@@ -119,11 +127,15 @@ class V2AModel(pl.LightningModule):
                 self.log(k, v.item(), prog_bar=True, on_step=True)
             else:
                 self.log(k, v.item(), prog_bar=True, on_step=True)
+
+        self.manual_backward(loss_output["loss"])
+        opt.step()
+        opt_bp.step()
         return loss_output["loss"]
 
     def training_epoch_end(self, outputs) -> None:
-        # Canonical mesh update every 20 epochs
-        if self.current_epoch != 0 and self.current_epoch % 20 == 0:
+        # Canonical mesh update every 10 epochs
+        if self.current_epoch != 0 and self.current_epoch % 10 == 0:
             cond = {"smpl": torch.zeros(1, 69).float().cuda()}
             mesh_canonical = generate_mesh(
                 lambda x: self.query_oc(x, cond),

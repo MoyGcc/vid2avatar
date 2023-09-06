@@ -25,7 +25,7 @@ def main(opt):
         accelerator="gpu",
         callbacks=[checkpoint_callback],
         max_epochs=8000,
-        check_val_every_n_epoch=10,
+        check_val_every_n_epoch=50,
         logger=logger,
         log_every_n_steps=1,
         num_sanity_val_steps=0,

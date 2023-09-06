@@ -3,6 +3,7 @@ import cv2
 import torch
 from torch.nn import functional as F
 import math
+from pytorch3d.transforms import euler_angles_to_matrix
 
 
 def split_input(model_input, total_pixels, n_pixels=10000):
@@ -231,19 +232,32 @@ def get_camera_params_equirect(uv, camera_pos, camera_rotate):
     camera_yaw = camera_rotate[..., 1]
     camera_roll = camera_rotate[..., 2]
 
-    pitch = -camera_pitch
-    yaw = -camera_yaw
-    roll = -camera_roll
+    pitch = camera_pitch.unsqueeze(-1)
+    yaw = camera_yaw.unsqueeze(-1)
+    roll = camera_roll.unsqueeze(-1)
 
-    direc_cam = direc_cam.view(
-        -1, 3
-    )  # (batch, num_samples, 3) --> (batch * num_samples, 3)
+    # direc_cam = direc_cam.view(
+    #     -1, 3
+    # )  # (batch, num_samples, 3) --> (batch * num_samples, 3)
+    direc_cam = direc_cam.unsqueeze(-1)
 
-    direc_world = rotation_roll(direc_cam, roll)
-    direc_world = rotation_pitch(direc_world, pitch)
-    direc_world = rotation_yaw(direc_world, yaw)
+    R_world_to_camera = euler_angles_to_matrix(
+        torch.cat([roll, pitch, yaw], dim=-1), convention="ZXY"
+    )
+    # R_world_to_camera = R.from_euler(
+    #     "zxy", (roll, pitch, yaw), degrees=False
+    # ).as_matrix()
+    R_world_to_camera = R_world_to_camera.unsqueeze(1).repeat(1, num_samples, 1, 1)
+    direc_world = torch.einsum("bnij,bnjk->bnik", R_world_to_camera, direc_cam).squeeze(
+        -1
+    )
+    # direc_world = torch.bmm(R_world_to_camera, direc_cam.unsqueeze(-1)).squeeze(-1)
 
-    direc_world = direc_world.view(batch_size, num_samples, 3)
+    # direc_world = rotation_roll(direc_cam, roll)
+    # direc_world = rotation_pitch(direc_world, pitch)
+    # direc_world = rotation_yaw(direc_world, yaw)
+
+    # direc_world = direc_world.view(batch_size, num_samples, 3)
 
     return direc_world, camera_pos
 
@@ -404,6 +418,10 @@ def weighted_sampling(data, img_size, num_sample, bbox_ratio=0.9):
     bbox_max = where.max(axis=1)
 
     num_sample_bbox = int(num_sample * bbox_ratio)
+    # samples_bbox_indices = np.random.choice(
+    #     list(range(where.shape[1])), size=num_sample_bbox, replace=False
+    # )
+    # samples_bbox = where[:, samples_bbox_indices].transpose()
     samples_bbox = np.random.rand(num_sample_bbox, 2)
     samples_bbox = samples_bbox * (bbox_max - bbox_min) + bbox_min
 

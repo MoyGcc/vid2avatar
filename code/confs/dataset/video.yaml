@@ -1,7 +1,7 @@
 metainfo:
     gender: 'female'
-    data_dir : data_equi/
-    subject: "data_equi"
+    data_dir : data_bbox_2d_init_training_no_pose_1e4/
+    subject: "data_bbox_2d_init_training_no_pose_1e4"
     start_frame: 0
     end_frame: 41
 
@@ -12,7 +12,7 @@ train:
     shuffle: True
     worker: 8
 
-    num_sample : 512 
+    num_sample : 1024 
 
 valid:
     type: "VideoVal"

@@ -76,11 +76,22 @@ class Dataset(torch.utils.data.Dataset):
         camera_poses = np.load(os.path.join(root, "camera_pos.npy"))
         camera_rotates = np.load(os.path.join(root, "camera_rotate.npy"))
 
+        max_distance_from_camera_to_artist = np.linalg.norm(
+            self.trans.squeeze(1) - camera_poses, axis=-1
+        ).max()
+
+        scene_bounding_sphere = 3.0
         # self.scale = 1 / scale_mats[0][0, 0]
-        self.scale = 1
+        self.scale = 1 / (
+            max_distance_from_camera_to_artist * 1.1 / scene_bounding_sphere
+        )
 
         self.camera_poses = torch.tensor(camera_poses, dtype=torch.float32)
         self.camera_rotates = torch.tensor(camera_rotates, dtype=torch.float32)
+
+        # normalize
+        # self.trans = self.trans * self.scale
+        self.camera_poses = self.camera_poses * self.scale
 
         # other properties
         self.num_sample = split.num_sample

@@ -225,7 +225,7 @@ def equirect_to_spherical(equi):
 
 
 def get_camera_params_equirect(uv, camera_pos, camera_rotate):
-    batch_size, num_samples, _ = uv.shape
+    _, num_samples, _ = uv.shape
     direc_cam = equirect_to_spherical(uv)
 
     camera_pitch = camera_rotate[..., 0]
@@ -236,28 +236,15 @@ def get_camera_params_equirect(uv, camera_pos, camera_rotate):
     yaw = camera_yaw.unsqueeze(-1)
     roll = camera_roll.unsqueeze(-1)
 
-    # direc_cam = direc_cam.view(
-    #     -1, 3
-    # )  # (batch, num_samples, 3) --> (batch * num_samples, 3)
     direc_cam = direc_cam.unsqueeze(-1)
 
     R_world_to_camera = euler_angles_to_matrix(
         torch.cat([roll, pitch, yaw], dim=-1), convention="ZXY"
     )
-    # R_world_to_camera = R.from_euler(
-    #     "zxy", (roll, pitch, yaw), degrees=False
-    # ).as_matrix()
     R_world_to_camera = R_world_to_camera.unsqueeze(1).repeat(1, num_samples, 1, 1)
     direc_world = torch.einsum("bnij,bnjk->bnik", R_world_to_camera, direc_cam).squeeze(
         -1
     )
-    # direc_world = torch.bmm(R_world_to_camera, direc_cam.unsqueeze(-1)).squeeze(-1)
-
-    # direc_world = rotation_roll(direc_cam, roll)
-    # direc_world = rotation_pitch(direc_world, pitch)
-    # direc_world = rotation_yaw(direc_world, yaw)
-
-    # direc_world = direc_world.view(batch_size, num_samples, 3)
 
     return direc_world, camera_pos
 
@@ -451,3 +438,13 @@ def weighted_sampling(data, img_size, num_sample, bbox_ratio=0.9):
         output[key] = new_val
 
     return output, index_outside
+
+
+def frequency_encoding(x, L=10):
+    encoding = []
+    for i in range(L):
+        encoding.append(torch.sin(math.pi * x * 2**i))
+    for i in range(L):
+        encoding.append(torch.cos(math.pi * x * 2**i))
+    encoding = torch.cat(encoding, dim=-1)
+    return encoding

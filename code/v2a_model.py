@@ -157,6 +157,7 @@ class V2AModel(pl.LightningModule):
 
     def query_oc(self, x, cond):
         x = x.reshape(-1, 3)
+        # x = utils.frequency_encoding(x)
         mnfld_pred = self.model.implicit_network(x, cond)[:, :, 0].reshape(-1, 1)
         return {"sdf": mnfld_pred}
 
@@ -171,6 +172,7 @@ class V2AModel(pl.LightningModule):
         x_c, _ = self.model.deformer.forward(
             x, smpl_tfs, return_weights=False, inverse=True, smpl_verts=smpl_verts
         )
+        # x_c = utils.frequency_encoding(x_c)
         output = self.model.implicit_network(x_c, cond)[0]
         sdf = output[:, 0:1]
 
@@ -343,6 +345,7 @@ class V2AModel(pl.LightningModule):
         os.makedirs("test_fg_rendering", exist_ok=True)
         os.makedirs("test_normal", exist_ok=True)
         os.makedirs("test_mesh", exist_ok=True)
+        os.makedirs("test_depth", exist_ok=True)
 
         mesh_canonical.export(f"test_mesh/{int(idx.cpu().numpy()):04d}_canonical.ply")
         mesh_deformed.export(f"test_mesh/{int(idx.cpu().numpy()):04d}_deformed.ply")
@@ -397,6 +400,7 @@ class V2AModel(pl.LightningModule):
                     "fg_rgb_values": model_outputs["fg_rgb_values"].detach().clone(),
                     "normal_values": model_outputs["normal_values"].detach().clone(),
                     "acc_map": model_outputs["acc_map"].detach().clone(),
+                    "depth": model_outputs["depth"].detach().clone(),
                     **batch_targets,
                 }
             )
@@ -436,6 +440,20 @@ class V2AModel(pl.LightningModule):
 
         normal = (normal * 255).astype(np.uint8)
 
+        # depth map
+        depth_pred = torch.cat([result["depth"] for result in results], dim=0)
+        depth_pred = depth_pred.reshape(*img_size, -1)
+        depth = torch.cat([depth_pred], dim=0).cpu().numpy()
+
+        depth = depth / depth.max()  # 0 ~ 1
+        # depth = depth.clip(0.75, 1.0)  # 0.75 ~ 1
+        # depth = depth * 4 - 3  # 0 ~ 1
+        depth = depth * 255
+        depth = depth.astype(np.uint8)
+
+        # depth = cv2.applyColorMap(depth, cv2.COLORMAP_JET)
+        #
+
         cv2.imwrite(
             f"test_mask/{int(idx.cpu().numpy()):04d}.png", pred_mask.cpu().numpy() * 255
         )
@@ -444,3 +462,4 @@ class V2AModel(pl.LightningModule):
         cv2.imwrite(
             f"test_fg_rendering/{int(idx.cpu().numpy()):04d}.png", fg_rgb[:, :, ::-1]
         )
+        cv2.imwrite(f"test_depth/{int(idx.cpu().numpy()):04d}.png", depth[:, :, ::-1])

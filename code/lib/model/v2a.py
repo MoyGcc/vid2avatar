@@ -79,6 +79,8 @@ class V2A(nn.Module):
             x_c, outlier_mask = self.deformer.forward(
                 x, smpl_tfs, return_weights=False, inverse=True, smpl_verts=smpl_verts
             )
+            # x_c_freq = utils.frequency_encoding(x_c)
+
             output = self.implicit_network(x_c, cond)[0]
             sdf = output[:, 0:1]
             feature = output[:, 1:]
@@ -184,6 +186,7 @@ class V2A(nn.Module):
             sample = self.sampler.get_points(verts_c, global_ratio=0.0)
 
             sample.requires_grad_()
+            # sample = utils.frequency_encoding(sample)
             local_pred = self.implicit_network(sample, cond)[..., 0:1]
             grad_theta = gradient(sample, local_pred)
 
@@ -240,6 +243,7 @@ class V2A(nn.Module):
             )  # [..., N_samples, 4]
             bg_points_flat = bg_points.reshape(-1, 4)
             bg_dirs_flat = bg_dirs.reshape(-1, 3)
+            # bg_points_flat = utils.frequency_encoding(bg_points_flat)
             bg_output = self.bg_implicit_network(
                 bg_points_flat, {"frame": frame_latent_code}
             )[0]
@@ -269,6 +273,10 @@ class V2A(nn.Module):
 
         normal_values = torch.sum(weights.unsqueeze(-1) * normal_values, 1)
 
+        # Depth map
+        depth = torch.norm(points - cam_loc.unsqueeze(1), dim=-1)
+        depth = torch.sum(weights * depth, dim=-1)
+
         if self.training:
             output = {
                 "points": points,
@@ -292,6 +300,7 @@ class V2A(nn.Module):
                 "fg_rgb_values": fg_output_rgb,
                 "normal_values": normal_values,
                 "sdf_output": sdf_output,
+                "depth": depth,
             }
         return output
 
@@ -341,6 +350,7 @@ class V2A(nn.Module):
         grads = torch.stack(grads, dim=-2)
         grads_inv = grads.inverse()
 
+        # pnts_c_freq = utils.frequency_encoding(pnts_c)
         output = self.implicit_network(pnts_c, cond)[0]
         sdf = output[:, :1]
 

@@ -2,7 +2,7 @@ learning_rate : 5.0e-4
 body_param_learning_rate : 1.0e-4
 sched_milestones : [200,500]
 sched_factor : 0.5
-smpl_init: True
+smpl_init: False
 is_continue: False
 use_body_parsing: False
 with_bkgd: True

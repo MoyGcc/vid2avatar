@@ -28,7 +28,11 @@ class Dataset(torch.utils.data.Dataset):
 
         # only store the image paths to avoid OOM
         self.img_paths = [self.img_paths[i] for i in self.training_indices]
-        self.img_size = utils.read_image(self.img_paths[0]).shape[:2]
+        self.img_size  = utils.read_image(self.img_paths[0]).shape[:2]
+
+        # TODO
+        # self.img_size = (128,128)
+
         self.n_images = len(self.img_paths)
 
         # coarse projected SMPL masks, only for sampling
@@ -85,6 +89,9 @@ class Dataset(torch.utils.data.Dataset):
         # normalize RGB
         img = cv2.imread(self.img_paths[idx])
         # preprocess: BGR -> RGB -> Normalize
+        
+        # TODO
+        # img = cv2.resize(img, (128,128))
 
         img = img[:, :, ::-1] / 255
 

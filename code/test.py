@@ -5,6 +5,8 @@ import pytorch_lightning as pl
 from pytorch_lightning.loggers import WandbLogger
 import os
 import glob
+from pytorch_lightning.profiler import PyTorchProfiler, SimpleProfiler, AdvancedProfiler
+from torch.profiler import profile, record_function, ProfilerActivity
 
 @hydra.main(config_path="confs", config_name="base")
 def main(opt):
@@ -18,22 +20,28 @@ def main(opt):
         save_last=True)
     logger = WandbLogger(project=opt.project_name, name=f"{opt.exp}/{opt.run}")
 
+    profiler = AdvancedProfiler(dirpath="/media/AI", filename="advanced.txt")
     trainer = pl.Trainer(
         gpus=1,
         accelerator="gpu",
         callbacks=[checkpoint_callback],
-        max_epochs=8000,
-        check_val_every_n_epoch=50,
         logger=logger,
         log_every_n_steps=1,
-        num_sanity_val_steps=0
+        profiler=profiler,
     )
 
     model = V2AModel(opt)
     checkpoint = sorted(glob.glob("checkpoints/*.ckpt"))[-1]
-    testset = create_dataset(opt.dataset.metainfo, opt.dataset.test)
+    testset = create_dataset(opt.dataset.metainfo, opt.dataset.test, end_idx=3)
 
-    trainer.test(model, testset, ckpt_path=checkpoint)
+    # profiler
+    with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True) as prof:
+        with record_function("model_inference"):
+            trainer.test(model, testset, ckpt_path=checkpoint)
+    
+    print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=20))
+    prof.export_chrome_trace("/media/AI/trace.json")
+
 
 if __name__ == '__main__':
     main()

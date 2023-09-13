@@ -312,7 +312,18 @@ class V2AModel(pl.LightningModule):
             f"fg_rendering/{self.current_epoch}.png", fg_rgb[:, :, ::-1])
 
     def test_step(self, batch, *args, **kwargs):
+        
+        os.makedirs("test_mask", exist_ok=True)
+        os.makedirs("test_rendering", exist_ok=True)
+        os.makedirs("test_fg_rendering", exist_ok=True)
+        os.makedirs("test_normal", exist_ok=True)
+        os.makedirs("test_mesh", exist_ok=True)
+        os.makedirs("test_depth", exist_ok=True)
+        
         inputs, targets, pixel_per_batch, total_pixels, idx = batch
+
+        idx = int(idx.cpu().numpy())
+
         num_splits = (total_pixels + pixel_per_batch - 1) // pixel_per_batch
         results = []
 
@@ -329,7 +340,7 @@ class V2AModel(pl.LightningModule):
         smpl_trans = body_model_params["transl"]
         smpl_pose = torch.cat(
             (body_model_params["global_orient"],
-             body_model_params["body_pose"]), dim=1
+            body_model_params["body_pose"]), dim=1
         )
 
         smpl_outputs = self.model.smpl_server(
@@ -337,40 +348,34 @@ class V2AModel(pl.LightningModule):
         smpl_tfs = smpl_outputs["smpl_tfs"]
         cond = {"smpl": smpl_pose[:, 3:] / np.pi}
 
-        mesh_canonical = generate_mesh(
-            lambda x: self.query_oc(x, cond),
-            self.model.smpl_server.verts_c[0],
-            point_batch=10000,
-            res_up=4,
-        )
-        self.model.deformer = SMPLDeformer(
-            betas=np.load(self.betas_path), gender=self.gender, K=7
-        )
-        verts_deformed = self.get_deformed_mesh_fast_mode(
-            mesh_canonical.vertices, smpl_tfs
-        )
-        mesh_deformed = trimesh.Trimesh(
-            vertices=verts_deformed, faces=mesh_canonical.faces, process=False
-        )
-
-        os.makedirs("test_mask", exist_ok=True)
-        os.makedirs("test_rendering", exist_ok=True)
-        os.makedirs("test_fg_rendering", exist_ok=True)
-        os.makedirs("test_normal", exist_ok=True)
-        os.makedirs("test_mesh", exist_ok=True)
-        os.makedirs("test_depth", exist_ok=True)
-
-        mesh_canonical.export(
-            f"test_mesh/{int(idx.cpu().numpy()):04d}_canonical.ply")
-        mesh_deformed.export(
-            f"test_mesh/{int(idx.cpu().numpy()):04d}_deformed.ply")
-        self.model.deformer = SMPLDeformer(
-            betas=np.load(self.betas_path), gender=self.gender
-        )
+        # generate mesh
+        # mesh_canonical = generate_mesh(
+        #     lambda x: self.query_oc(x, cond),
+        #     self.model.smpl_server.verts_c[0],
+        #     point_batch=10000,
+        #     res_up=4,
+        # )
+        # self.model.deformer = SMPLDeformer(
+        #     betas=np.load(self.betas_path), gender=self.gender, K=7
+        # )
+        # verts_deformed = self.get_deformed_mesh_fast_mode(
+        #     mesh_canonical.vertices, smpl_tfs
+        # )
+        # mesh_deformed = trimesh.Trimesh(
+        #     vertices=verts_deformed, faces=mesh_canonical.faces, process=False
+        # )
+        # mesh_canonical.export(
+        #     f"test_mesh/{idx:04d}_canonical.ply")
+        # mesh_deformed.export(
+        #     f"test_mesh/{idx:04d}_deformed.ply")
+        # self.model.deformer = SMPLDeformer(
+        #     betas=np.load(self.betas_path), gender=self.gender
+        # )
+        
         for i in range(num_splits):
             indices = list(
                 range(i * pixel_per_batch, min((i + 1)
-                      * pixel_per_batch, total_pixels))
+                    * pixel_per_batch, total_pixels))
             )
             batch_inputs = {
                 "uv": inputs["uv"][:, indices],
@@ -382,8 +387,6 @@ class V2AModel(pl.LightningModule):
                 "smpl_trans": inputs["smpl_params"][:, 1:4],
                 "idx": inputs["idx"] if "idx" in inputs.keys() else None,
             }
-
-            body_model_params = self.body_model_params(inputs["idx"])
 
             batch_inputs.update(
                 {
@@ -474,13 +477,13 @@ class V2AModel(pl.LightningModule):
         #
 
         cv2.imwrite(
-            f"test_mask/{int(idx.cpu().numpy()):04d}.png", pred_mask.cpu().numpy() * 255
+            f"test_mask/{idx:04d}.png", pred_mask.cpu().numpy() * 255
         )
         cv2.imwrite(
-            f"test_rendering/{int(idx.cpu().numpy()):04d}.png", rgb[:, :, ::-1])
+            f"test_rendering/{idx:04d}.png", rgb[:, :, ::-1])
         cv2.imwrite(
-            f"test_normal/{int(idx.cpu().numpy()):04d}.png", normal[:, :, ::-1])
+            f"test_normal/{idx:04d}.png", normal[:, :, ::-1])
         cv2.imwrite(
-            f"test_fg_rendering/{int(idx.cpu().numpy()):04d}.png", fg_rgb)
+            f"test_fg_rendering/{idx:04d}.png", fg_rgb)
         cv2.imwrite(
-            f"test_depth/{int(idx.cpu().numpy()):04d}.png", depth[:, :, ::-1])
+            f"test_depth/{idx:04d}.png", depth[:, :, ::-1])

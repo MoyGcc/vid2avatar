@@ -48,7 +48,13 @@ class SMPLServer(torch.nn.Module):
         )
         self.verts_c = output["smpl_verts"]
         self.joints_c = output["smpl_jnts"]
-        self.tfs_c_inv = output["smpl_tfs"].squeeze(0).inverse()
+        self.tfs_c = output["smpl_tfs"].squeeze(0)
+
+        # use this instead of torch.inverse() because torch.inverse() is too slow.        
+        I = torch.eye(4, device=self.tfs_c.device)
+        I = I.unsqueeze(0).repeat(self.tfs_c.shape[0],1,1)
+        self.tfs_c_inv = torch.linalg.solve(self.tfs_c, I)
+        
 
     def forward(self, scale, transl, thetas, betas, absolute=False):
         """return SMPL output from params

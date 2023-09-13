@@ -433,3 +433,36 @@ def clip_and_convert_rgb_to_srgb(img: np.ndarray):
         img <= 0.0031308, 12.92 * img, 1.055 * np.power(img, 1 / 2.4) - 0.055
     )
     return img
+
+
+@torch.jit.script
+def inverse_3x3_batch(mat):
+    assert mat.shape[1:] == (3, 3)
+    
+    det = mat[:, 0, 0] * (mat[:, 1, 1] * mat[:, 2, 2] - mat[:, 1, 2] * mat[:, 2, 1]) - \
+          mat[:, 0, 1] * (mat[:, 1, 0] * mat[:, 2, 2] - mat[:, 1, 2] * mat[:, 2, 0]) + \
+          mat[:, 0, 2] * (mat[:, 1, 0] * mat[:, 2, 1] - mat[:, 1, 1] * mat[:, 2, 0])
+    
+    singular_mask = det == 0
+    if singular_mask.any():
+        print("Warning: Singular matrices found.")
+    
+    adj = torch.zeros_like(mat)
+    
+    adj[:, 0, 0] = mat[:, 1, 1] * mat[:, 2, 2] - mat[:, 1, 2] * mat[:, 2, 1]
+    adj[:, 0, 1] = mat[:, 0, 2] * mat[:, 2, 1] - mat[:, 0, 1] * mat[:, 2, 2]
+    adj[:, 0, 2] = mat[:, 0, 1] * mat[:, 1, 2] - mat[:, 0, 2] * mat[:, 1, 1]
+    
+    adj[:, 1, 0] = mat[:, 1, 2] * mat[:, 2, 0] - mat[:, 1, 0] * mat[:, 2, 2]
+    adj[:, 1, 1] = mat[:, 0, 0] * mat[:, 2, 2] - mat[:, 0, 2] * mat[:, 2, 0]
+    adj[:, 1, 2] = mat[:, 1, 0] * mat[:, 0, 2] - mat[:, 0, 0] * mat[:, 1, 2]
+    
+    adj[:, 2, 0] = mat[:, 1, 0] * mat[:, 2, 1] - mat[:, 1, 1] * mat[:, 2, 0]
+    adj[:, 2, 1] = mat[:, 2, 0] * mat[:, 0, 1] - mat[:, 0, 0] * mat[:, 2, 1]
+    adj[:, 2, 2] = mat[:, 0, 0] * mat[:, 1, 1] - mat[:, 1, 0] * mat[:, 0, 1]
+    
+    inv_matrices = adj / det.unsqueeze(-1).unsqueeze(-1)
+    
+    inv_matrices[singular_mask] = float('nan')
+    
+    return inv_matrices

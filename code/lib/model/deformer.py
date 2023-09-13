@@ -63,7 +63,13 @@ class SMPLDeformer():
         if inverse:
             # p:num_point, n:num_bone, i,j: num_dim+1
             tf_w = torch.einsum('bpn,bnij->bpij', w.double(), tfs.double())
-            p_h = torch.einsum('bpij,bpj->bpi', tf_w.inverse(), p_h.double()).float()
+
+            # use this instead of torch.inverse() because torch.inverse() is too slow.
+            I = torch.eye(4, device=tf_w.device)
+            I = I.unsqueeze(0).repeat(tf_w.shape[0],1,1)
+            tf_w_inverse = torch.linalg.solve(tf_w, I)
+
+            p_h = torch.einsum('bpij,bpj->bpi', tf_w_inverse, p_h.double()).float()
         else:
             p_h = torch.einsum('bpn, bnij, bpj->bpi', w.double(), tfs.double(), p_h.double()).float()
         
@@ -83,7 +89,13 @@ def skinning(x, w, tfs, inverse=False):
     if inverse:
         # p:n_point, n:n_bone, i,k: n_dim+1
         w_tf = torch.einsum("bpn,bnij->bpij", w, tfs)
-        x_h = torch.einsum("bpij,bpj->bpi", w_tf.inverse(), x_h)
+        
+        # use this instead of torch.inverse() because torch.inverse() is too slow.
+        I = torch.eye(4, device=w_tf.device)
+        I = I.unsqueeze(0).repeat(w_tf.shape[0],1,1)
+        w_tf_inverse = torch.linalg.solve(w_tf, I)
+        
+        x_h = torch.einsum("bpij,bpj->bpi", w_tf_inverse, x_h)
     else:
         x_h = torch.einsum("bpn,bnij,bpj->bpi", w, tfs, x_h)
     return x_h[:, :, :3]

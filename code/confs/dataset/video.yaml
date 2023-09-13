@@ -34,7 +34,7 @@ test:
     batch_size: 1
     drop_last: False
     shuffle: False
-    worker: 8
+    worker: 16
 
     num_sample : -1
     pixel_per_batch: 2048

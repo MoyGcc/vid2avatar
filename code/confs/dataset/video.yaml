@@ -1,7 +1,7 @@
 metainfo:
     gender: 'female'
-    data_dir : data_bbox_2d_init_training_no_pose_1e4_scaled_fqenc/
-    subject: "data_bbox_2d_init_training_no_pose_1e4_scaled_fqenc"
+    data_dir : data_bbox_2d_init_training_no_pose_1e4_scaled_round_mask_xy_flip_bicubic/
+    subject: "data_bbox_2d_init_training_no_pose_1e4_scaled_round_mask_xy_flip_bicubic"
     start_frame: 0
     end_frame: 42
 

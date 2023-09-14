@@ -80,10 +80,12 @@ class Loss(nn.Module):
             rgb_gt[nan_filter],
         )
         eikonal_loss = self.get_eikonal_loss(model_outputs["grad_theta"])
-        if model_outputs["epoch"] < 20 or model_outputs["epoch"] % 20 == 0:
-            bce_loss = self.get_bce_loss(model_outputs["acc_map"])
-        else:
-            bce_loss = self.get_bce_loss(model_outputs["acc_map"], mask=None)
+        # if model_outputs["epoch"] < 20 or model_outputs["epoch"] % 20 == 0:
+        #     bce_loss = self.get_bce_loss(model_outputs["acc_map"])
+        # else:
+        bce_loss = self.get_bce_loss(
+            model_outputs["acc_map"], mask=ground_truth["mask"]
+        )
         opacity_sparse_loss = self.get_opacity_sparse_loss(
             model_outputs["acc_map"], model_outputs["index_off_surface"]
         )

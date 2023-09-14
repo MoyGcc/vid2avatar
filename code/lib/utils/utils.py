@@ -4,6 +4,7 @@ import torch
 from torch.nn import functional as F
 import math
 from pytorch3d.transforms import euler_angles_to_matrix
+from scipy.interpolate import interp2d
 
 
 def split_input(model_input, total_pixels, n_pixels=10000):
@@ -425,15 +426,25 @@ def weighted_sampling(data, img_size, num_sample, bbox_ratio=0.9):
     output = {}
     for key, val in data.items():
         if len(val.shape) == 3:
-            new_val = np.stack(
-                [
-                    bilinear_interpolation(indices[:, 0], indices[:, 1], val[:, :, i])
-                    for i in range(val.shape[2])
-                ],
-                axis=-1,
+            # new_val = np.stack(
+            #     [
+            #         bilinear_interpolation(indices[:, 0], indices[:, 1], val[:, :, i])
+            #         for i in range(val.shape[2])
+            #     ],
+            #     axis=-1,
+            # )
+
+            new_val = cv2.remap(
+                src=val.astype(np.float32),
+                map1=(indices[:, 1]).astype(np.float32),
+                map2=(indices[:, 0]).astype(np.float32),
+                interpolation=cv2.INTER_CUBIC,
             )
         else:
-            new_val = bilinear_interpolation(indices[:, 0], indices[:, 1], val)
+            # new_val = np.where(new_val > 0.0, 1.0, 0.0)
+            new_val = val[
+                indices.astype(np.int32)[:, 0], indices.astype(np.int32)[:, 1]
+            ].astype(np.float32)
         new_val = new_val.reshape(-1, *val.shape[2:])
         output[key] = new_val
 

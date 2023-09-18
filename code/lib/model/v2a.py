@@ -356,7 +356,7 @@ class V2A(nn.Module):
             grads.append(grad)
         grads = torch.stack(grads, dim=-2)
 
-        grads_inv = utils.inverse_3x3_batch(grads)  # use this instead of torch.inverse() because torch.inverse() is too slow.
+        grads_inv = grads.inverse()
 
         output = self.implicit_network(pnts_c, cond)[0]
         sdf = output[:, :1]

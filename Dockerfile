@@ -1,4 +1,4 @@
-ARG FROM_IMAGE_NAME=amazevr/22.10-pytorch:cuda11.3-py3.8-torch1.11.0-pytorch3d0.6.1-opencv-openimageio-kaolin0.13.0
+ARG FROM_IMAGE_NAME=amazevr/23.06:cuda11.7-py3.8-torch2.0.1-pytorch3d0.7.2-kaolin0.14.0
 FROM ${FROM_IMAGE_NAME}
 
 ADD . /workspace/v2a

@@ -21,7 +21,7 @@ def main(opt):
     logger = WandbLogger(project=opt.project_name, name=f"{opt.exp}/{opt.run}")
 
     trainer = pl.Trainer(
-        gpus=1,
+        devices=1,
         accelerator="gpu",
         callbacks=[checkpoint_callback],
         max_epochs=8000,

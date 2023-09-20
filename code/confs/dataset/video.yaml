@@ -7,6 +7,7 @@ metainfo:
     camera_pos_path: /media/AI/liam/v2a/zara/cam/EOT_ascii_Trans.txt
     camera_rotate_path: /media/AI/liam/v2a/zara/cam/EOT_ascii_Rotate.txt
     start_index: 4200
+    img_size: [722, 1297]
     
 train:
     type: "Video"
@@ -37,4 +38,6 @@ test:
     worker: 16
 
     num_sample : -1
-    pixel_per_batch: 2048
+    pixel_per_batch: 3072
+
+    output_img_size: ~

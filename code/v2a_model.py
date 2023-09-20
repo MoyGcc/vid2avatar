@@ -48,6 +48,8 @@ class V2AModel(pl.LightningModule):
         self.training_modules += ["body_model_params"]
 
         self.loss = Loss(opt.model.loss)
+        
+        self.validation_step_outputs = []
 
     def load_body_model_params(self):
         body_model_params = {
@@ -139,7 +141,7 @@ class V2AModel(pl.LightningModule):
                 self.log(k, v.item(), prog_bar=True, on_step=True)
         return loss_output["loss"]
 
-    def training_epoch_end(self, outputs) -> None:
+    def on_train_epoch_end(self) -> None:
         # Canonical mesh update every 20 epochs
         if self.current_epoch != 0 and self.current_epoch % 20 == 0:
             cond = {"smpl": torch.zeros(1, 69).float().cuda()}
@@ -159,8 +161,7 @@ class V2AModel(pl.LightningModule):
             self.model.mesh_face_vertices = index_vertices_by_faces(
                 self.model.mesh_v_cano, self.model.mesh_f_cano
             )
-        return super().training_epoch_end(outputs)
-
+            
     def query_oc(self, x, cond):
         x = x.reshape(-1, 3)
         mnfld_pred = self.model.implicit_network(
@@ -219,13 +220,13 @@ class V2AModel(pl.LightningModule):
 
         output.update({"canonical_mesh": mesh_canonical})
 
+        total_pixels = targets["img_size"][0] * targets["img_size"][1]
+        total_pixels = int(total_pixels.cpu().numpy())
+
         split = utils.split_input(
             inputs,
-            targets["total_pixels"][0],
-            n_pixels=min(
-                targets["pixel_per_batch"],
-                targets["img_size"][0] * targets["img_size"][1],
-            ),
+            total_pixels,
+            n_pixels=min(targets["pixel_per_batch"], total_pixels),
         )
 
         res = []
@@ -248,7 +249,7 @@ class V2AModel(pl.LightningModule):
         batch_size = targets["rgb"].shape[0]
 
         model_outputs = utils.merge_output(
-            res, targets["total_pixels"][0], batch_size)
+            res, total_pixels, batch_size)
 
         output.update(
             {
@@ -259,12 +260,17 @@ class V2AModel(pl.LightningModule):
             }
         )
 
+        self.validation_step_outputs.append(output)
+
         return output
 
     def validation_step_end(self, batch_parts):
         return batch_parts
 
-    def validation_epoch_end(self, outputs) -> None:
+    def on_validation_epoch_end(self) -> None:
+        
+        outputs = self.validation_step_outputs
+        
         img_size = outputs[0]["img_size"]
 
         rgb_pred = torch.cat([output["rgb_values"]
@@ -312,7 +318,6 @@ class V2AModel(pl.LightningModule):
             f"fg_rendering/{self.current_epoch}.png", fg_rgb[:, :, ::-1])
 
     def test_step(self, batch, *args, **kwargs):
-        
         os.makedirs("test_mask", exist_ok=True)
         os.makedirs("test_rendering", exist_ok=True)
         os.makedirs("test_fg_rendering", exist_ok=True)
@@ -320,10 +325,14 @@ class V2AModel(pl.LightningModule):
         os.makedirs("test_mesh", exist_ok=True)
         os.makedirs("test_depth", exist_ok=True)
         
-        inputs, targets, pixel_per_batch, total_pixels, idx = batch
+        inputs, targets, pixel_per_batch, idx = batch
 
+        img_size = targets["img_size"]
+        output_img_size = targets["output_img_size"]
+        
         idx = int(idx.cpu().numpy())
-
+        
+        total_pixels = inputs["uv"].size(0) * inputs["uv"].size(1)
         num_splits = (total_pixels + pixel_per_batch - 1) // pixel_per_batch
         results = []
 
@@ -373,10 +382,7 @@ class V2AModel(pl.LightningModule):
         # )
         
         for i in range(num_splits):
-            indices = list(
-                range(i * pixel_per_batch, min((i + 1)
-                    * pixel_per_batch, total_pixels))
-            )
+            indices = list(range(i * pixel_per_batch, min((i+1) * pixel_per_batch, total_pixels)))
             batch_inputs = {
                 "uv": inputs["uv"][:, indices],
                 "intrinsics": inputs["intrinsics"],
@@ -402,13 +408,6 @@ class V2AModel(pl.LightningModule):
             batch_inputs.update({"smpl_shape": body_model_params["betas"]})
             batch_inputs.update({"smpl_trans": body_model_params["transl"]})
 
-            batch_targets = {
-                "rgb": targets["rgb"][:, indices].detach().clone()
-                if "rgb" in targets.keys()
-                else None,
-                "img_size": targets["img_size"],
-            }
-
             with torch.no_grad():
                 model_outputs = self.model(batch_inputs)
             results.append(
@@ -418,33 +417,28 @@ class V2AModel(pl.LightningModule):
                     "normal_values": model_outputs["normal_values"].detach().clone(),
                     "acc_map": model_outputs["acc_map"].detach().clone(),
                     "depth": model_outputs["depth"].detach().clone(),
-                    **batch_targets,
                 }
             )
 
-        img_size = results[0]["img_size"]
         rgb_pred = torch.cat([result["rgb_values"]
                              for result in results], dim=0)
-        rgb_pred = rgb_pred.reshape(*img_size, -1)
+        rgb_pred = rgb_pred.reshape(*output_img_size, -1)
 
         fg_rgb_pred = torch.cat([result["fg_rgb_values"]
                                 for result in results], dim=0)
-        fg_rgb_pred = fg_rgb_pred.reshape(*img_size, -1)
+        fg_rgb_pred = fg_rgb_pred.reshape(*output_img_size, -1)
 
         normal_pred = torch.cat([result["normal_values"]
                                 for result in results], dim=0)
-        normal_pred = (normal_pred.reshape(*img_size, -1) + 1) / 2
+        normal_pred = (normal_pred.reshape(*output_img_size, -1) + 1) / 2
 
         pred_mask = torch.cat([result["acc_map"] for result in results], dim=0)
-        pred_mask = pred_mask.reshape(*img_size, -1)
+        pred_mask = pred_mask.reshape(*output_img_size, -1)
 
-        if results[0]["rgb"] is not None:
-            rgb_gt = torch.cat([result["rgb"]
-                               for result in results], dim=1).squeeze(0)
-            rgb_gt = rgb_gt.reshape(*img_size, -1)
-            rgb = torch.cat([rgb_gt, rgb_pred], dim=0).cpu().numpy()
-        else:
-            rgb = torch.cat([rgb_pred], dim=0).cpu().numpy()
+        rgb_pred = torch.cat([rgb_pred], dim=0).cpu().numpy()
+
+        # rgb = targets["rgb"]
+        
         if "normal" in results[0].keys():
             normal_gt = torch.cat(
                 [result["normal"] for result in results], dim=1
@@ -454,7 +448,7 @@ class V2AModel(pl.LightningModule):
         else:
             normal = torch.cat([normal_pred], dim=0).cpu().numpy()
 
-        rgb = (rgb * 255).astype(np.uint8)
+        rgb_pred = (rgb_pred * 255).astype(np.uint8)
 
         fg_rgb = torch.cat([fg_rgb_pred], dim=0).cpu().numpy()
         fg_rgb = (fg_rgb * 255).astype(np.uint8)
@@ -464,7 +458,7 @@ class V2AModel(pl.LightningModule):
         # depth map
         depth_pred = torch.cat([result["depth"]
                                 for result in results], dim=0)
-        depth_pred = depth_pred.reshape(*img_size, -1)
+        depth_pred = depth_pred.reshape(*output_img_size, -1)
         depth = torch.cat([depth_pred], dim=0).cpu().numpy()
 
         depth = depth / depth.max()  # 0 ~ 1
@@ -477,10 +471,9 @@ class V2AModel(pl.LightningModule):
         #
 
         cv2.imwrite(
-            f"test_mask/{idx:04d}.png", pred_mask.cpu().numpy() * 255
-        )
+            f"test_mask/{idx:04d}.png", pred_mask.cpu().numpy() * 255)
         cv2.imwrite(
-            f"test_rendering/{idx:04d}.png", rgb[:, :, ::-1])
+            f"test_rendering/{idx:04d}.png", rgb_pred[:, :, ::-1])
         cv2.imwrite(
             f"test_normal/{idx:04d}.png", normal[:, :, ::-1])
         cv2.imwrite(

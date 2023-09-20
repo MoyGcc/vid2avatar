@@ -17,7 +17,6 @@ class Dataset(torch.utils.data.Dataset):
         self.start_frame = metainfo.start_frame
         self.end_frame = metainfo.end_frame
         self.skip_step = 1
-        self.images, self.img_sizes = [], []
         self.training_indices = list(
             range(metainfo.start_frame, metainfo.end_frame, self.skip_step)
         )
@@ -28,10 +27,8 @@ class Dataset(torch.utils.data.Dataset):
 
         # only store the image paths to avoid OOM
         self.img_paths = [self.img_paths[i] for i in self.training_indices]
-        self.img_size  = utils.read_image(self.img_paths[0]).shape[:2]
-
-        # TODO
-        # self.img_size = (128,128)
+        
+        self.img_size = tuple(metainfo.img_size)
 
         self.n_images = len(self.img_paths)
 
@@ -88,11 +85,9 @@ class Dataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         # normalize RGB
         img = cv2.imread(self.img_paths[idx])
+        
         # preprocess: BGR -> RGB -> Normalize
         
-        # TODO
-        # img = cv2.resize(img, (128,128))
-
         img = img[:, :, ::-1] / 255
 
         # img = utils.read_image(self.img_paths[idx])
@@ -102,9 +97,7 @@ class Dataset(torch.utils.data.Dataset):
         # preprocess: BGR -> Gray -> Mask
         mask = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY) > 0
 
-        img_size = self.img_size
-
-        uv = np.mgrid[: img_size[0], : img_size[1]].astype(np.int32)
+        uv = np.mgrid[: self.img_size[0], : self.img_size[1]].astype(np.int32)
         uv = np.flip(uv, axis=0).copy().transpose(1, 2, 0).astype(np.float32)
 
         smpl_params = torch.zeros([86]).float()
@@ -122,7 +115,7 @@ class Dataset(torch.utils.data.Dataset):
             }
 
             samples, index_outside = utils.weighted_sampling(
-                data, img_size, self.num_sample
+                data, self.img_size, self.num_sample
             )
             inputs = {
                 "uv": samples["uv"].astype(np.float32),
@@ -158,9 +151,6 @@ class Dataset(torch.utils.data.Dataset):
 class ValDataset(torch.utils.data.Dataset):
     def __init__(self, metainfo, split):
         self.dataset = Dataset(metainfo, split)
-        self.img_size = self.dataset.img_size
-
-        self.total_pixels = np.prod(self.img_size)
         self.pixel_per_batch = split.pixel_per_batch
 
     def __len__(self):
@@ -183,7 +173,6 @@ class ValDataset(torch.utils.data.Dataset):
             "rgb": images["rgb"],
             "img_size": images["img_size"],
             "pixel_per_batch": self.pixel_per_batch,
-            "total_pixels": self.total_pixels,
         }
         return inputs, images
 
@@ -191,11 +180,11 @@ class ValDataset(torch.utils.data.Dataset):
 class TestDataset(torch.utils.data.Dataset):
     def __init__(self, metainfo, split):
         self.dataset = Dataset(metainfo, split)
-
-        self.img_size = self.dataset.img_size
-
-        self.total_pixels = np.prod(self.img_size)
         self.pixel_per_batch = split.pixel_per_batch
+        if split.output_img_size:
+            self.output_img_size = tuple(split.output_img_size)
+        else:
+            self.output_img_size = self.dataset.img_size
 
     def __len__(self):
         return len(self.dataset)
@@ -203,13 +192,23 @@ class TestDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         data = self.dataset[idx]
 
+        uv = np.mgrid[: self.output_img_size[0], : self.output_img_size[1]].astype(np.int32)
+        u = uv[0] * (self.dataset.img_size[0] / self.output_img_size[0])
+        v = uv[1] * (self.dataset.img_size[1] / self.output_img_size[1])
+        uv = np.stack([u, v], axis=0)
+        uv = np.flip(uv, axis=0).copy().transpose(1, 2, 0).astype(np.float32)
+        uv = uv.reshape(-1, 2).astype(np.float32)
+
         inputs, images = data
         inputs = {
-            "uv": inputs["uv"],
+            "uv": uv,
             "intrinsics": inputs["intrinsics"],
             "pose": inputs["pose"],
             "smpl_params": inputs["smpl_params"],
             "idx": inputs["idx"],
         }
-        images = {"rgb": images["rgb"], "img_size": images["img_size"]}
-        return inputs, images, self.pixel_per_batch, self.total_pixels, idx
+        images = {"rgb": images["rgb"], 
+                "img_size": self.dataset.img_size,
+                "output_img_size": self.output_img_size
+                }
+        return inputs, images, self.pixel_per_batch, idx

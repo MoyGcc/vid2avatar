@@ -9,9 +9,42 @@ from lib.utils import utils
 os.environ["OPENCV_IO_ENABLE_OPENEXR"] = "1"
 
 
+def flip_y_2d_points(points, y_range=[-1.0, 1.0]):
+    """Flip along y values of 2d points array.
+
+    Args:
+        points (torch.Tensor or np.ndarray): N-array 2d points, size of last dimension is 2.
+        y_range (list, optional): Min/max of y values. Defaults to [-1.0, 1.0].
+
+    Raises:
+        TypeError: Only numpy ndarray and torch Tensor are supported.
+
+    Returns:
+        new_points: flipped points.
+    """
+    y_min = y_range[0]
+    y_max = y_range[1]
+
+    if isinstance(points, torch.Tensor):
+        x = points[..., 0]
+        y = points[..., 1]
+        new_y = -y + y_min + y_max
+        new_points = torch.stack([x, new_y], dim=-1)
+    elif isinstance(points, np.ndarray):
+        x = points[..., 0]
+        y = points[..., 1]
+        new_y = -y + y_min + y_max
+        new_points = np.stack([x, new_y], axis=-1)
+    else:
+        raise TypeError(
+            "Unsupported data type. Only numpy ndarray and torch Tensor are supported."
+        )
+    return new_points
+
+
 class Dataset(torch.utils.data.Dataset):
     def __init__(self, metainfo, split):
-        root = os.path.join("../data", metainfo.data_dir)
+        root = os.path.join(".", metainfo.data_dir)
         root = hydra.utils.to_absolute_path(root)
 
         self.start_frame = metainfo.start_frame
@@ -38,42 +71,19 @@ class Dataset(torch.utils.data.Dataset):
         self.mask_paths = [self.mask_paths[i] for i in self.training_indices]
 
         self.shape = np.load(os.path.join(root, "mean_shape.npy"))
-        self.poses = np.zeros_like(
-            np.load(os.path.join(root, "poses.npy"))[self.training_indices]
-        )
-        self.trans = np.zeros_like(
-            np.load(os.path.join(root, "normalize_trans.npy"))[self.training_indices]
-        )
+        self.poses = np.load(os.path.join(root, "poses.npy"))[self.training_indices]
+        self.trans = np.load(os.path.join(root, "normalize_trans.npy"))[
+            self.training_indices
+        ]
         # cameras
-        start_index = metainfo.start_index
-        image_indices = [start_index + i * 3 for i in range(0, self.n_images)]
+        camera_poses = np.load(os.path.join(root, "camera_pos.npy"))
+        camera_rotates = np.load(os.path.join(root, "camera_rotate.npy"))
 
-        self.camera_pos = utils.load_pos_init(metainfo.camera_pos_path, image_indices)
-        self.camera_rot = utils.load_rotate_init(
-            metainfo.camera_rotate_path, image_indices
-        )
+        # self.scale = 1 / scale_mats[0][0, 0]
+        self.scale = 1
 
-        camera_dict = np.load(os.path.join(root, "cameras_normalize.npz"))
-        scale_mats = [
-            camera_dict["scale_mat_%d" % idx].astype(np.float32)
-            for idx in self.training_indices
-        ]
-        world_mats = [
-            camera_dict["world_mat_%d" % idx].astype(np.float32)
-            for idx in self.training_indices
-        ]
-
-        self.scale = 1 / scale_mats[0][0, 0]
-
-        self.intrinsics_all = []
-        self.pose_all = []
-        for scale_mat, world_mat in zip(scale_mats, world_mats):
-            P = world_mat @ scale_mat
-            P = P[:3, :4]
-            intrinsics, pose = utils.load_K_Rt_from_P(None, P)
-            self.intrinsics_all.append(torch.from_numpy(intrinsics).float())
-            self.pose_all.append(torch.from_numpy(pose).float())
-        assert len(self.intrinsics_all) == len(self.pose_all)
+        self.camera_poses = torch.tensor(camera_poses, dtype=torch.float32)
+        self.camera_rotates = torch.tensor(camera_rotates, dtype=torch.float32)
 
         # other properties
         self.num_sample = split.num_sample
@@ -95,55 +105,68 @@ class Dataset(torch.utils.data.Dataset):
 
         mask = cv2.imread(self.mask_paths[idx])
         # preprocess: BGR -> Gray -> Mask
-        mask = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY) > 0
+        mask = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
+        dilate_kernel = np.ones((20, 20), np.uint8)
+        mask_for_sampling = cv2.dilate(mask, dilate_kernel)
 
-        uv = np.mgrid[: self.img_size[0], : self.img_size[1]].astype(np.int32)
-        uv = np.flip(uv, axis=0).copy().transpose(1, 2, 0).astype(np.float32)
+        mask = mask > 0
+        mask_for_sampling = mask > 0
+        # mask = mask / 255.0
+
+        img_size = self.img_size
+
+        x = np.linspace(-0.5, 0.5, img_size[0], endpoint=False)
+        y = np.linspace(-0.5, 0.5, img_size[1], endpoint=False)
+        uv = np.stack(np.meshgrid(x, y, indexing="xy"), axis=-1)  # (h, w, 2)
+        uv = flip_y_2d_points(uv, y_range=[-0.5, 0.5])
 
         smpl_params = torch.zeros([86]).float()
         smpl_params[0] = torch.from_numpy(np.asarray(self.scale)).float()
 
         smpl_params[1:4] = torch.from_numpy(self.trans[idx]).float()
-        smpl_params[4:76] = torch.from_numpy(self.poses[idx]).float()
+        smpl_params[4:76] = torch.from_numpy(self.poses[idx]).reshape(-1).float()
         smpl_params[76:] = torch.from_numpy(self.shape).float()
 
         if self.num_sample > 0:
             data = {
                 "rgb": img,
                 "uv": uv,
-                "object_mask": mask,
+                "object_mask": mask_for_sampling,
+                "mask": mask,
             }
 
             samples, index_outside = utils.weighted_sampling(
-                data, self.img_size, self.num_sample
+                data, img_size, self.num_sample
             )
             inputs = {
                 "uv": samples["uv"].astype(np.float32),
-                "intrinsics": self.intrinsics_all[idx],
-                "pose": self.pose_all[idx],
-                "camera_pos": self.camera_pos[idx],
-                "camera_rot": self.camera_rot[idx],
+                # "intrinsics": self.intrinsics_all[idx],
+                # "pose": self.pose_all[idx],
+                "camera_poses": self.camera_poses[idx],
+                "camera_rotates": self.camera_rotates[idx],
                 "smpl_params": smpl_params,
-                "index_outside": index_outside,
+                # "index_outside": index_outside,
                 "idx": idx,
-                "img_size": self.img_size,
             }
-            images = {"rgb": samples["rgb"].astype(np.float32)}
+            images = {
+                "rgb": samples["rgb"].astype(np.float32),
+                "mask": samples["mask"].astype(np.float32),
+            }
             return inputs, images
         else:
             inputs = {
                 "uv": uv.reshape(-1, 2).astype(np.float32),
-                "intrinsics": self.intrinsics_all[idx],
-                "pose": self.pose_all[idx],
-                "camera_pos": self.camera_pos[idx],
-                "camera_rot": self.camera_rot[idx],
+                # "intrinsics": self.intrinsics_all[idx],
+                # "pose": self.pose_all[idx],
+                "camera_poses": self.camera_poses[idx],
+                "camera_rotates": self.camera_rotates[idx],
                 "smpl_params": smpl_params,
                 "idx": idx,
-                "img_size": self.img_size,
             }
             images = {
                 "rgb": img.reshape(-1, 3).astype(np.float32),
                 "img_size": self.img_size,
+                "mask": mask.reshape(-1).astype(np.float32),
             }
             return inputs, images
 
@@ -163,8 +186,10 @@ class ValDataset(torch.utils.data.Dataset):
 
         inputs = {
             "uv": inputs["uv"],
-            "intrinsics": inputs["intrinsics"],
-            "pose": inputs["pose"],
+            "camera_poses": inputs["camera_poses"],
+            "camera_rotates": inputs["camera_rotates"],
+            # "intrinsics": inputs["intrinsics"],
+            # "pose": inputs["pose"],
             "smpl_params": inputs["smpl_params"],
             "image_id": image_id,
             "idx": idx,
@@ -173,6 +198,8 @@ class ValDataset(torch.utils.data.Dataset):
             "rgb": images["rgb"],
             "img_size": images["img_size"],
             "pixel_per_batch": self.pixel_per_batch,
+            "total_pixels": self.total_pixels,
+            "mask": images["mask"],
         }
         return inputs, images
 
@@ -191,20 +218,25 @@ class TestDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         data = self.dataset[idx]
 
-        uv = np.mgrid[: self.output_img_size[0], : self.output_img_size[1]].astype(np.int32)
+        x = np.linspace(-0.5, 0.5, self.output_img_size[0], endpoint=False)
+        y = np.linspace(-0.5, 0.5, self.output_img_size[1], endpoint=False)
+        uv = np.meshgrid(x, y, indexing="xy")  # (2, h, w)
         u = uv[0] * (self.dataset.img_size[0] / self.output_img_size[0])
         v = uv[1] * (self.dataset.img_size[1] / self.output_img_size[1])
-        uv = np.stack([u, v], axis=0)
-        uv = np.flip(uv, axis=0).copy().transpose(1, 2, 0).astype(np.float32)
+        uv = np.stack([u, v], axis=-1)  # (h, w, 2)
+        uv = flip_y_2d_points(uv, y_range=[-0.5, 0.5])
         uv = uv.reshape(-1, 2).astype(np.float32)
-
+                
         inputs, images = data
         data = {
             "uv": uv,
-            "intrinsics": inputs["intrinsics"],
-            "pose": inputs["pose"],
+            "camera_poses": inputs["camera_poses"],
+            "camera_rotates": inputs["camera_rotates"],
+            # "intrinsics": inputs["intrinsics"],
+            # "pose": inputs["pose"],
             "smpl_params": inputs["smpl_params"],
             "idx": inputs["idx"],
-            "rgb": images["rgb"]
+            "rgb": images["rgb"],
+            "mask": images["mask"],           
         }
         return data

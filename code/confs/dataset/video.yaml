@@ -1,14 +1,11 @@
 metainfo:
-    gender: 'male'
-    data_dir : /media/AI/Common/Recon3D/v2a/data/parkinglot
-    subject: "parkinglot"
+    gender: 'female'
+    data_dir : data_bbox_2d_init_training_no_pose_1e4/
+    subject: "data_bbox_2d_init_training_no_pose_1e4"
     start_frame: 0
-    end_frame: 42
-    camera_pos_path: /media/AI/liam/v2a/zara/cam/EOT_ascii_Trans.txt
-    camera_rotate_path: /media/AI/liam/v2a/zara/cam/EOT_ascii_Rotate.txt
-    start_index: 4200
-    img_size: [722, 1297]
-    
+    end_frame: 41
+    img_size: [960, 960]
+
 train:
     type: "Video"
     batch_size: 1
@@ -16,7 +13,7 @@ train:
     shuffle: True
     worker: 8
 
-    num_sample : 512 
+    num_sample : 1024 
 
 valid:
     type: "VideoVal"

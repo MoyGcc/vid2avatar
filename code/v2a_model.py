@@ -25,8 +25,7 @@ class V2AModel(pl.LightningModule):
             opt.dataset.metainfo.end_frame - opt.dataset.metainfo.start_frame
         )
         self.betas_path = os.path.join(
-            hydra.utils.to_absolute_path(".."),
-            "data",
+            hydra.utils.to_absolute_path("."),
             opt.dataset.metainfo.data_dir,
             "mean_shape.npy",
         )
@@ -38,60 +37,44 @@ class V2AModel(pl.LightningModule):
         self.training_modules = ["model"]
 
         self.training_indices = list(range(self.start_frame, self.end_frame))
-        self.body_model_params = BodyModelParams(
-            num_training_frames, model_type="smpl")
+        self.body_model_params = BodyModelParams(num_training_frames, model_type="smpl")
         self.load_body_model_params()
         optim_params = self.body_model_params.param_names
         for param_name in optim_params:
-            self.body_model_params.set_requires_grad(
-                param_name, requires_grad=True)
+            self.body_model_params.set_requires_grad(param_name, requires_grad=True)
         self.training_modules += ["body_model_params"]
 
         self.loss = Loss(opt.model.loss)
-        
-        self.validation_step_outputs = []
+        self.automatic_optimization = False
 
     def load_body_model_params(self):
         body_model_params = {
             param_name: [] for param_name in self.body_model_params.param_names
         }
-        data_root = os.path.join("../data", self.opt.dataset.metainfo.data_dir)
+        data_root = os.path.join(".", self.opt.dataset.metainfo.data_dir)
         data_root = hydra.utils.to_absolute_path(data_root)
 
         body_model_params["betas"] = torch.tensor(
             np.load(os.path.join(data_root, "mean_shape.npy"))[None],
             dtype=torch.float32,
         )
-        body_model_params['global_orient'] = torch.tensor(np.load(os.path.join(
-            data_root, 'poses.npy'))[self.training_indices][:, :3], dtype=torch.float32)
-        # body_model_params["global_orient"] = torch.zeros_like(
-        #     torch.tensor(
-        #         np.load(os.path.join(data_root, "poses.npy"))[self.training_indices][
-        #             :, :3
-        #         ],
-        #         dtype=torch.float32,
-        #     )
-        # )
-        body_model_params['body_pose'] = torch.tensor(np.load(os.path.join(
-            data_root, 'poses.npy'))[self.training_indices][:, 3:], dtype=torch.float32)
-        # body_model_params["body_pose"] = torch.zeros_like(
-        #     torch.tensor(
-        #         np.load(os.path.join(data_root, "poses.npy"))[self.training_indices][
-        #             :, 3:
-        #         ],
-        #         dtype=torch.float32,
-        #     )
-        # )
-        body_model_params['transl'] = torch.tensor(np.load(os.path.join(
-            data_root, 'normalize_trans.npy'))[self.training_indices], dtype=torch.float32)
-        # body_model_params["transl"] = torch.zeros_like(
-        #     torch.tensor(
-        #         np.load(os.path.join(data_root, "normalize_trans.npy"))[
-        #             self.training_indices
-        #         ],
-        #         dtype=torch.float32,
-        #     )
-        # )
+        poses = np.load(os.path.join(data_root, "poses.npy"))
+        num_samples = poses.shape[0]
+        poses = poses.reshape(num_samples, -1)
+        body_model_params["global_orient"] = torch.tensor(
+            poses[self.training_indices][:, :3],
+            dtype=torch.float32,
+        )
+        body_model_params["body_pose"] = torch.tensor(
+            poses[self.training_indices][:, 3:],
+            dtype=torch.float32,
+        )
+        body_model_params["transl"] = torch.tensor(
+            np.load(os.path.join(data_root, "normalize_trans.npy")).squeeze()[
+                self.training_indices
+            ],
+            dtype=torch.float32,
+        )
 
         for param_name in body_model_params.keys():
             self.body_model_params.init_parameters(
@@ -102,30 +85,36 @@ class V2AModel(pl.LightningModule):
         params = [
             {"params": self.model.parameters(), "lr": self.opt.model.learning_rate}
         ]
-        params.append(
+        body_params = [
             {
                 "params": self.body_model_params.parameters(),
-                "lr": self.opt.model.learning_rate * 0.1,
+                "lr": self.opt.model.body_param_learning_rate,
             }
-        )
-        self.optimizer = optim.Adam(
-            params, lr=self.opt.model.learning_rate, eps=1e-8)
+        ]
+
+        optimizer = optim.Adam(params, lr=self.opt.model.learning_rate, eps=1e-8)
         self.scheduler = optim.lr_scheduler.MultiStepLR(
-            self.optimizer,
+            optimizer,
             milestones=self.opt.model.sched_milestones,
             gamma=self.opt.model.sched_factor,
         )
-        return [self.optimizer], [self.scheduler]
+
+        body_param_optimizer = optim.RMSprop(
+            body_params, lr=self.opt.model.body_param_learning_rate
+        )
+        return optimizer, body_param_optimizer
 
     def training_step(self, batch):
+        opt, opt_bp = self.optimizers()
+        opt.zero_grad()
+        opt_bp.zero_grad()
         inputs, targets = batch
 
         batch_idx = inputs["idx"]
 
         body_model_params = self.body_model_params(batch_idx)
         inputs["smpl_pose"] = torch.cat(
-            (body_model_params["global_orient"],
-             body_model_params["body_pose"]), dim=1
+            (body_model_params["global_orient"], body_model_params["body_pose"]), dim=1
         )
         inputs["smpl_shape"] = body_model_params["betas"]
         inputs["smpl_trans"] = body_model_params["transl"]
@@ -139,11 +128,15 @@ class V2AModel(pl.LightningModule):
                 self.log(k, v.item(), prog_bar=True, on_step=True)
             else:
                 self.log(k, v.item(), prog_bar=True, on_step=True)
+
+        self.manual_backward(loss_output["loss"])
+        opt.step()
+        opt_bp.step()
         return loss_output["loss"]
 
-    def on_train_epoch_end(self) -> None:
-        # Canonical mesh update every 20 epochs
-        if self.current_epoch != 0 and self.current_epoch % 20 == 0:
+    def training_epoch_end(self, outputs) -> None:
+        # Canonical mesh update every 10 epochs
+        if self.current_epoch != 0 and self.current_epoch % 10 == 0:
             cond = {"smpl": torch.zeros(1, 69).float().cuda()}
             mesh_canonical = generate_mesh(
                 lambda x: self.query_oc(x, cond),
@@ -161,11 +154,11 @@ class V2AModel(pl.LightningModule):
             self.model.mesh_face_vertices = index_vertices_by_faces(
                 self.model.mesh_v_cano, self.model.mesh_f_cano
             )
-            
+        return super().training_epoch_end(outputs)
+
     def query_oc(self, x, cond):
         x = x.reshape(-1, 3)
-        mnfld_pred = self.model.implicit_network(
-            x, cond)[:, :, 0].reshape(-1, 1)
+        mnfld_pred = self.model.implicit_network(x, cond)[:, :, 0].reshape(-1, 1)
         return {"sdf": mnfld_pred}
 
     def query_wc(self, x):
@@ -188,8 +181,7 @@ class V2AModel(pl.LightningModule):
         verts = torch.tensor(verts).cuda().float()
         weights = self.model.deformer.query_weights(verts)
         verts_deformed = (
-            skinning(verts.unsqueeze(0), weights,
-                     smpl_tfs).data.cpu().numpy()[0]
+            skinning(verts.unsqueeze(0), weights, smpl_tfs).data.cpu().numpy()[0]
         )
         return verts_deformed
 
@@ -259,8 +251,6 @@ class V2AModel(pl.LightningModule):
                 **targets,
             }
         )
-
-        self.validation_step_outputs.append(output)
 
         return output
 
@@ -354,8 +344,10 @@ class V2AModel(pl.LightningModule):
             indices = list(range(i * pixel_per_batch, min((i+1) * pixel_per_batch, total_pixels)))
             batch_inputs = {
                 "uv": batch["uv"][:, indices],
-                "intrinsics": batch["intrinsics"],
-                "pose": batch["pose"],
+                "camera_poses": batch["camera_poses"],
+                "camera_rotates": batch["camera_rotates"],
+                # "intrinsics": batch["intrinsics"],
+                # "pose": batch["pose"],
                 "smpl_params": batch["smpl_params"],
                 "smpl_pose": batch["smpl_params"][:, 4:76],
                 "smpl_shape": batch["smpl_params"][:, 76:],

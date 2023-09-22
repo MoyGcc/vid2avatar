@@ -82,16 +82,6 @@ class SMPLServer(torch.nn.Module):
             v_template=self.v_template,
         )
 
-        # smpl_output = self.smpl.forward(
-        #     betas=betas,
-        #     transl=None,
-        #     body_pose=None,
-        #     global_orient=None,
-        #     return_verts=True,
-        #     return_full_pose=True,
-        #     v_template=self.v_template,
-        # )
-
         verts = smpl_output.vertices.clone()
         output["smpl_verts"] = verts * scale.unsqueeze(1) + transl.unsqueeze(
             1

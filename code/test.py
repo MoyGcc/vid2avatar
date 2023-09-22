@@ -8,6 +8,7 @@ import glob
 # from pytorch_lightning.profilers import PyTorchProfiler, SimpleProfiler, AdvancedProfiler
 from torch.profiler import profile, record_function, ProfilerActivity
 
+
 @hydra.main(config_path="confs", config_name="base")
 def main(opt):
     pl.seed_everything(42)
@@ -17,7 +18,8 @@ def main(opt):
         dirpath="checkpoints/",
         filename="{epoch:04d}-{loss}",
         save_on_train_epoch_end=True,
-        save_last=True)
+        save_last=True,
+    )
     logger = WandbLogger(project=opt.project_name, name=f"{opt.exp}/{opt.run}")
 
     # profiler = AdvancedProfiler(dirpath="/media/AI", filename="advanced.txt")
@@ -43,5 +45,6 @@ def main(opt):
     # prof.export_chrome_trace("/media/AI/trace.json")
 
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

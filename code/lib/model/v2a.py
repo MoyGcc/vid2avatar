@@ -15,6 +15,15 @@ from .sampler import PointInSpace
 from .smpl import SMPLServer
 
 
+import numpy as np
+import torch
+import torch.nn as nn
+from torch.autograd import grad
+import hydra
+import kaolin
+from kaolin.ops.mesh import index_vertices_by_faces
+
+
 class V2A(nn.Module):
     def __init__(self, opt, betas_path, gender, num_training_frames):
         super().__init__()
@@ -57,8 +66,7 @@ class V2A(nn.Module):
             smpl_model_state = torch.load(
                 hydra.utils.to_absolute_path("./assets/smpl_init.pth")
             )
-            self.implicit_network.load_state_dict(
-                smpl_model_state["model_state_dict"])
+            self.implicit_network.load_state_dict(smpl_model_state["model_state_dict"])
 
         self.smpl_v_cano = self.smpl_server.verts_c
         self.smpl_f_cano = torch.tensor(
@@ -82,8 +90,7 @@ class V2A(nn.Module):
             sdf = output[:, 0:1]
             feature = output[:, 1:]
             if not self.training:
-                # set a large SDF value for outlier points
-                sdf[outlier_mask] = 4.0
+                sdf[outlier_mask] = 4.0  # set a large SDF value for outlier points
 
         return sdf, x_c, feature
 
@@ -109,16 +116,13 @@ class V2A(nn.Module):
     def forward(self, input):
         # Parse model input
         torch.set_grad_enabled(True)
-        intrinsics = input["intrinsics"]
-        pose = input["pose"]
+        # intrinsics = input["intrinsics"]
+        # pose = input["pose"]
         uv = input["uv"]
+        camera_pos = input["camera_poses"]
+        camera_rotate = input["camera_rotates"]
 
-        # height, width = input["img_size"]
-        # u = (uv[:, :, 0] / width) - 1  # [-1, 0]
-        # v = (uv[:, :, 1] / height) * 2 - 1  # [-1, 1]
-        # uv = torch.stack([u, v], dim=-1)
-
-        scale = input["smpl_params"][:, 0]
+        scale = input["smpl_params"][:, 0][:, None]
         smpl_pose = input["smpl_pose"]
         smpl_shape = input["smpl_shape"]
         smpl_trans = input["smpl_trans"]
@@ -132,19 +136,18 @@ class V2A(nn.Module):
             if input["current_epoch"] < 20 or input["current_epoch"] % 20 == 0:
                 cond = {"smpl": smpl_pose[:, 3:] * 0.0}
 
-        ray_dirs, camera_loc = utils.get_camera_params(uv, pose, intrinsics)
-        # camera_loc = input["camera_pos"].to(torch.float32)
-        # camera_rot = input["camera_rot"].to(torch.float32)
-        # ray_dirs = utils.get_camera_params_vr_camera(uv, camera_rot=camera_rot)
+        ray_dirs, cam_loc = utils.get_camera_params_equirect(
+            uv, camera_pos=camera_pos, camera_rotate=camera_rotate
+        )
         batch_size, num_pixels, _ = ray_dirs.shape
 
-        camera_loc = camera_loc.unsqueeze(1).repeat(
+        cam_loc = cam_loc.unsqueeze(1).repeat(
             1, num_pixels, 1).reshape(-1, 3)
         ray_dirs = ray_dirs.reshape(-1, 3)
 
         z_vals, _ = self.ray_sampler.get_z_vals(
             ray_dirs,
-            camera_loc,
+            cam_loc,
             self,
             cond,
             smpl_tfs,
@@ -157,7 +160,7 @@ class V2A(nn.Module):
         z_vals = z_vals[:, :-1]
         N_samples = z_vals.shape[1]
 
-        points = camera_loc.unsqueeze(
+        points = cam_loc.unsqueeze(
             1) + z_vals.unsqueeze(2) * ray_dirs.unsqueeze(1)
         points_flat = points.reshape(-1, 3)
 
@@ -179,8 +182,7 @@ class V2A(nn.Module):
             ) = self.check_off_in_surface_points_cano_mesh(
                 canonical_points, N_samples, threshold=self.threshold
             )
-            canonical_points = canonical_points.reshape(
-                num_pixels, N_samples, 3)
+            canonical_points = canonical_points.reshape(num_pixels, N_samples, 3)
 
             canonical_points = canonical_points.reshape(-1, 3)
 
@@ -241,7 +243,7 @@ class V2A(nn.Module):
             )  # 1--->0
 
             bg_dirs = ray_dirs.unsqueeze(1).repeat(1, N_bg_samples, 1)
-            bg_locs = camera_loc.unsqueeze(1).repeat(1, N_bg_samples, 1)
+            bg_locs = cam_loc.unsqueeze(1).repeat(1, N_bg_samples, 1)
 
             bg_points = self.depth2pts_outside(
                 bg_locs, bg_dirs, z_vals_bg
@@ -279,7 +281,7 @@ class V2A(nn.Module):
         normal_values = torch.sum(weights.unsqueeze(-1) * normal_values, 1)
 
         # Depth map
-        depth = torch.norm(points - camera_loc.unsqueeze(1),
+        depth = torch.norm(points - cam_loc.unsqueeze(1),
                            dim=-1)
         depth = torch.sum(weights * depth, dim=-1)
 
@@ -288,7 +290,7 @@ class V2A(nn.Module):
                 "points": points,
                 "rgb_values": rgb_values,
                 "normal_values": normal_values,
-                "index_outside": input["index_outside"],
+                # "index_outside": input["index_outside"],
                 "index_off_surface": index_off_surface,
                 "index_in_surface": index_in_surface,
                 "acc_map": torch.sum(weights, -1),
@@ -306,7 +308,7 @@ class V2A(nn.Module):
                 "fg_rgb_values": fg_output_rgb,
                 "normal_values": normal_values,
                 "sdf_output": sdf_output,
-                "depth": depth,
+                "depth": depth
             }
         return output
 
@@ -395,8 +397,7 @@ class V2A(nn.Module):
         shifted_free_energy = torch.cat(
             [torch.zeros(dists.shape[0], 1).cuda(), free_energy], dim=-1
         )  # add 0 for transperancy 1 at t_0
-        # probability of it is not empty here
-        alpha = 1 - torch.exp(-free_energy)
+        alpha = 1 - torch.exp(-free_energy)  # probability of it is not empty here
         transmittance = torch.exp(
             -torch.cumsum(shifted_free_energy, dim=-1)
         )  # probability of everything is empty up to now
@@ -418,8 +419,7 @@ class V2A(nn.Module):
         bg_dists = torch.cat(
             [
                 bg_dists,
-                torch.tensor([1e10]).cuda().unsqueeze(
-                    0).repeat(bg_dists.shape[0], 1),
+                torch.tensor([1e10]).cuda().unsqueeze(0).repeat(bg_dists.shape[0], 1),
             ],
             -1,
         )
@@ -429,8 +429,7 @@ class V2A(nn.Module):
         bg_shifted_free_energy = torch.cat(
             [torch.zeros(bg_dists.shape[0], 1).cuda(), bg_free_energy[:, :-1]], dim=-1
         )  # shift one step
-        # probability of it is not empty here
-        bg_alpha = 1 - torch.exp(-bg_free_energy)
+        bg_alpha = 1 - torch.exp(-bg_free_energy)  # probability of it is not empty here
         bg_transmittance = torch.exp(
             -torch.cumsum(bg_shifted_free_energy, dim=-1)
         )  # probability of everything is empty up to now
@@ -470,16 +469,14 @@ class V2A(nn.Module):
             * torch.sum(rot_axis * p_sphere, dim=-1, keepdim=True)
             * (1.0 - torch.cos(rot_angle))
         )
-        p_sphere_new = p_sphere_new / \
-            torch.norm(p_sphere_new, dim=-1, keepdim=True)
+        p_sphere_new = p_sphere_new / torch.norm(p_sphere_new, dim=-1, keepdim=True)
         pts = torch.cat((p_sphere_new, depth.unsqueeze(-1)), dim=-1)
 
         return pts
 
 
 def gradient(inputs, outputs):
-    d_points = torch.ones_like(
-        outputs, requires_grad=False, device=outputs.device)
+    d_points = torch.ones_like(outputs, requires_grad=False, device=outputs.device)
     points_grad = grad(
         outputs=outputs,
         inputs=inputs,

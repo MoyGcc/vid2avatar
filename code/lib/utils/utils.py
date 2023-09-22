@@ -4,6 +4,7 @@ import torch
 from torch.nn import functional as F
 import math
 import pytorch3d.transforms as transforms
+from pytorch3d.transforms import euler_angles_to_matrix
 
 
 def split_input(model_input, total_pixels, n_pixels=10000):
@@ -76,6 +77,192 @@ def load_K_Rt_from_P(filename, P=None):
     return intrinsics, pose
 
 
+def rotation_pitch(data, angle):
+    batch_size = data.size(0)
+    if angle.dim() == 1:  # (1,)
+        angle = angle.tile((batch_size, 1))  # (b, 1)
+    zero = torch.zeros((batch_size, 1), dtype=torch.float32).to(data.device)  # (b, 1)
+    one = torch.ones((batch_size, 1), dtype=torch.float32).to(data.device)  # (b, 1)
+    pitch = torch.cat(
+        [
+            torch.cat([one, zero, zero], dim=1).unsqueeze(-1),
+            torch.cat([zero, torch.cos(angle), -torch.sin(angle)], dim=1).unsqueeze(-1),
+            torch.cat([zero, torch.sin(angle), torch.cos(angle)], dim=1).unsqueeze(-1),
+        ],
+        dim=2,
+    )  # (b, 1) => (b, 3, 3)
+    # (b, 3, 3), (b, 3) => (b, 3)
+    data = pitch.bmm(data.unsqueeze(-1)).squeeze(-1)
+    return data
+
+
+def rotation_yaw(data, angle):
+    batch_size = data.size(0)
+    if angle.dim() == 1:  # (1,)
+        angle = angle.tile((batch_size, 1))  # (b, 1)
+    zero = torch.zeros((batch_size, 1), dtype=torch.float32).to(data.device)  # (b, 1)
+    one = torch.ones((batch_size, 1), dtype=torch.float32).to(data.device)  # (b, 1)
+    yaw = torch.cat(
+        [
+            torch.cat([torch.cos(angle), zero, torch.sin(angle)], dim=1).unsqueeze(-1),
+            torch.cat([zero, one, zero], dim=1).unsqueeze(-1),
+            torch.cat([-torch.sin(angle), zero, torch.cos(angle)], dim=1).unsqueeze(-1),
+        ],
+        dim=2,
+    )  # (b, 1) => (b, 3, 3)
+    # (b, 3, 3), (b, 3) => (b, 3)
+    data = yaw.bmm(data.unsqueeze(-1)).squeeze(-1)
+    return data
+
+
+def rotation_roll(data, angle):
+    batch_size = data.size(0)
+    if angle.dim() == 1:  # (1,)
+        angle = angle.tile((batch_size, 1))  # (b, 1)
+    zero = torch.zeros((batch_size, 1), dtype=torch.float32).to(data.device)  # (b, 1)
+    one = torch.ones((batch_size, 1), dtype=torch.float32).to(data.device)  # (b, 1)
+    roll = torch.cat(
+        [
+            torch.cat([torch.cos(angle), -torch.sin(angle), zero], dim=1).unsqueeze(-1),
+            torch.cat([torch.sin(angle), torch.cos(angle), zero], dim=1).unsqueeze(-1),
+            torch.cat([zero, zero, one], dim=1).unsqueeze(-1),
+        ],
+        dim=2,
+    )  # (b, 1) => (b, 3, 3)
+    # (b, 3, 3), (b, 3) => (b, 3)
+    data = roll.bmm(data.unsqueeze(-1)).squeeze(-1)
+    return data
+
+
+def zup_to_yup(p):
+    """transform the coordinate system from z-up to y-up. It is identical to rotate 90 degree counter clock-wise along x-axis."""
+
+    if isinstance(p, torch.Tensor):
+        x = p[..., 0]
+        y = p[..., 2]
+        z = -p[..., 1]
+        p_new = torch.stack([x, y, z], dim=-1)
+    elif isinstance(p, np.ndarray):
+        x = p[..., 0]
+        y = p[..., 2]
+        z = -p[..., 1]
+        p_new = np.stack([x, y, z], axis=-1)
+    else:
+        raise TypeError(
+            "Unsupported data type. Only numpy ndarray and torch Tensor are supported."
+        )
+    return p_new
+
+
+def equirect_to_longlat(p):
+    if isinstance(p, torch.Tensor):
+        long = p[..., 0] * math.pi
+        lat = p[..., 1] * math.pi / 2
+    elif isinstance(p, np.ndarray):
+        long = p[..., 0] * math.pi
+        lat = p[..., 1] * math.pi / 2
+    else:
+        raise TypeError(
+            "Unsupported data type. Only numpy ndarray and torch Tensor are supported."
+        )
+    return long, lat
+
+
+def longlat_to_point(long, lat):
+    if isinstance(long, torch.Tensor):
+        x = torch.cos(lat) * torch.cos(long)
+        y = torch.cos(lat) * torch.sin(long)
+        z = torch.sin(lat)
+        p = torch.stack([x, y, z], dim=-1)
+    elif isinstance(long, np.ndarray):
+        x = np.cos(lat) * np.cos(long)
+        y = np.cos(lat) * np.sin(long)
+        z = np.sin(lat)
+        p = np.stack([x, y, z], axis=-1)
+    else:
+        raise TypeError(
+            "Unsupported data type. Only numpy ndarray and torch Tensor are supported."
+        )
+    return p
+
+
+def equirect_to_spherical(equi):
+    """Equirectangular 2d points to 3D points on a unit sphere. Fov 180 degree of equirectangular images is assumed. 3D points are based on y-up coordinate system.
+
+    Refer to http://paulbourke.net/dome/dualfish2sphere/diagram.pdf
+
+    Args:
+        equi (torch.Tensor or np.ndarray): equirectangular 2d points, ranging from -1 to 1.
+
+    Returns:
+        points: 3d points on a unit sphere, ranging from -1 to 1.
+    """
+
+    x = equi[..., 0]
+    y = equi[..., 1]
+
+    # normalize x from (-1, 1) to (-1, 0). Range of x should be (-1, 0) where the equirectangular image's fov=180, (-1, 1) where fov=360. Fov 180 is assumed in our case.
+    x = (x - 1) / 2
+
+    # x should be inverted because longitude starts from right-most to left-most.
+    x = -x
+
+    if isinstance(equi, torch.Tensor):
+        equi = torch.stack([x, y], dim=-1)
+    elif isinstance(equi, np.ndarray):
+        equi = np.stack([x, y], axis=-1)
+    else:
+        raise TypeError(
+            "Unsupported data type. Only numpy ndarray and torch Tensor are supported."
+        )
+
+    long, lat = equirect_to_longlat(equi)
+    p = longlat_to_point(long, lat)
+
+    # convert to y-up because 3d points are based on y-up coordinate system.
+    p = zup_to_yup(p)
+
+    return p
+
+
+def get_camera_params_equirect(uv, camera_pos, camera_rotate):
+    batch_size, num_samples, _ = uv.shape
+    direc_cam = equirect_to_spherical(uv)
+
+    camera_pitch = camera_rotate[..., 0]
+    camera_yaw = camera_rotate[..., 1]
+    camera_roll = camera_rotate[..., 2]
+
+    pitch = camera_pitch.unsqueeze(-1)
+    yaw = camera_yaw.unsqueeze(-1)
+    roll = camera_roll.unsqueeze(-1)
+
+    # direc_cam = direc_cam.view(
+    #     -1, 3
+    # )  # (batch, num_samples, 3) --> (batch * num_samples, 3)
+    direc_cam = direc_cam.unsqueeze(-1)
+
+    R_world_to_camera = euler_angles_to_matrix(
+        torch.cat([roll, pitch, yaw], dim=-1), convention="ZXY"
+    )
+    # R_world_to_camera = R.from_euler(
+    #     "zxy", (roll, pitch, yaw), degrees=False
+    # ).as_matrix()
+    R_world_to_camera = R_world_to_camera.unsqueeze(1).repeat(1, num_samples, 1, 1)
+    direc_world = torch.einsum("bnij,bnjk->bnik", R_world_to_camera, direc_cam).squeeze(
+        -1
+    )
+    # direc_world = torch.bmm(R_world_to_camera, direc_cam.unsqueeze(-1)).squeeze(-1)
+
+    # direc_world = rotation_roll(direc_cam, roll)
+    # direc_world = rotation_pitch(direc_world, pitch)
+    # direc_world = rotation_yaw(direc_world, yaw)
+
+    # direc_world = direc_world.view(batch_size, num_samples, 3)
+
+    return direc_world, camera_pos
+
+
 def get_camera_params(uv, pose, intrinsics):
     if pose.shape[1] == 7:  # In case of quaternion vector representation
         cam_loc = pose[:, 4:]
@@ -104,15 +291,6 @@ def get_camera_params(uv, pose, intrinsics):
     ray_dirs = F.normalize(ray_dirs, dim=2)
 
     return ray_dirs, cam_loc
-
-
-def get_camera_params_vr_camera(uv, camera_rot):
-    long, lat = equirect_to_long_lat(uv)
-    ray_dirs = long_lat_to_point(long, lat)
-    ray_dirs = coord_z_up_to_y_up_batch(ray_dirs)
-    ray_dirs = rotate_camera_to_world(ray_dirs, R=camera_rot)
-    ray_dirs = F.normalize(ray_dirs, dim=-1)
-    return ray_dirs
 
 
 def lift(x, y, z, intrinsics):
@@ -241,6 +419,10 @@ def weighted_sampling(data, img_size, num_sample, bbox_ratio=0.9):
     bbox_max = where.max(axis=1)
 
     num_sample_bbox = int(num_sample * bbox_ratio)
+    # samples_bbox_indices = np.random.choice(
+    #     list(range(where.shape[1])), size=num_sample_bbox, replace=False
+    # )
+    # samples_bbox = where[:, samples_bbox_indices].transpose()
     samples_bbox = np.random.rand(num_sample_bbox, 2)
     samples_bbox = samples_bbox * (bbox_max - bbox_min) + bbox_min
 
@@ -270,166 +452,3 @@ def weighted_sampling(data, img_size, num_sample, bbox_ratio=0.9):
         output[key] = new_val
 
     return output, index_outside
-
-
-def load_pos_init(init_pos_path, indices):
-    with open(init_pos_path, "r") as f:
-        init = f.readlines()
-    init = list(map(lambda x: list(map(lambda y: float(y), x.split(" "))), init))
-    init = np.array(init)
-
-    init = init[indices]
-    # init = coord_y_up_to_minus_y_up_translate(init)
-    init = cm_to_mm(init)
-
-    return init
-
-
-def load_rotate_init(init_rotate_path, indices):
-    with open(init_rotate_path, "r") as f:
-        init = f.readlines()
-    init = list(map(lambda x: list(map(lambda y: float(y), x.split(" "))), init))
-    init = np.array(init)
-
-    init = init[indices]
-    init = degree_to_radian(init)
-
-    return init
-
-
-def coord_z_up_to_y_up_batch(batch):
-    return torch.stack([batch[..., 0], batch[..., 2], -batch[..., 1]], dim=-1)
-
-
-def coord_z_up_to_y_up_translate(T):
-    x = T[:, 0]
-    y = T[:, 2]
-    z = -T[:, 1]
-    return np.stack([x, y, z], axis=-1)
-
-
-def coord_z_up_to_y_up_rotate(R):
-    pitch = -R[:, 1]
-    yaw = R[:, 2] - 90
-    roll = R[:, 0] - 90
-    return np.stack([pitch, yaw, roll], axis=-1)
-
-
-def coord_y_up_to_minus_y_up_translate(T):
-    x = T[:, 0]
-    y = -T[:, 1]
-    z = -T[:, 2]
-    return np.stack([x, y, z], axis=-1)
-
-
-def coord_y_up_to_minus_y_up_rotate(R):
-    pitch = R[:, 0]
-    yaw = -R[:, 1]
-    roll = -R[:, 2]
-    return np.stack([pitch, yaw, roll], axis=-1)
-
-
-def long_lat_to_point(long, lat):
-    x = torch.cos(lat) * torch.cos(long)
-    y = torch.cos(lat) * torch.sin(long)
-    z = torch.sin(lat)
-    return torch.stack([x, y, z], dim=-1)
-
-
-def degree_to_radian(degree):
-    return degree * math.pi / 180
-
-
-def cm_to_mm(x):
-    return x * 10
-
-
-def equirect_to_long_lat(p):
-    long = p[..., 0] * math.pi
-    lat = p[..., 1] * math.pi / 2
-    return long, lat
-
-
-def get_equi2rect_mapping(idx_equi, height, width, fov):
-    """
-    idx_equi: (-1 ~ 1, -1 ~ 1)
-    idx_rect: (-1 ~ 1, -1 ~ 1)
-    """
-
-    # denormalize (-1, 1) => (0, height or width)
-    idx_equi = denormalize_points(idx_equi, height, width)
-
-    # equirectangular coordinates to spherical coordinates.
-    x = (idx_equi[..., 0] - width / 2) / (width / 2)
-    y = (idx_equi[..., 1] - height / 2) / (height / 2)
-    long = (x - 1) * math.pi / 2
-    lat = y * math.pi / 2
-
-    # shperical coordinates to normalized device coordinates.
-    x = np.cos(lat) * np.cos(long)
-    y = np.cos(lat) * np.sin(long)
-    z = np.sin(lat)
-    x = x / (z + 1e-8)
-    y = y / (z + 1e-8)
-
-
-def denormalize_points(points, height, width):
-    # (-1~1,-1~1) => (0~width, 0~height)
-    x = (points[..., 0] + 1) / 2 * width
-    y = (points[..., 1] + 1) / 2 * height
-    points = np.stack([x, y], axis=-1)
-    return points
-
-
-# TODO batch version
-def coord_world_to_camera(points, R, T):
-    """
-    points: numpy array (N,3)
-    R: numpy array (3,3)
-    T: numpy array (3,)
-    """
-    points = points - T
-    points = np.matmul(points, R)
-    return points
-
-
-# TODO batch version
-def coord_camera_to_world(points, R, T):
-    """
-    points: numpy array (N,3)
-    R: numpy array (3,3)
-    T: numpy array (3,)
-    """
-    points = np.matmul(points, R.transpose(0, 1))
-    points = points + T
-    return points
-
-
-# TODO merge with numpy version
-def rotate_camera_to_world(points, R):
-    """
-    points: tensor (B,N,3)
-    R: tensor (B,3,3)
-    T: tensor (B,3)
-    """
-    R = transforms.euler_angles_to_matrix(R, "ZXY")
-    points = torch.bmm(R, points.transpose(1, 2)).transpose(1, 2)
-    return points
-
-
-def read_image(input_path, method="opencv"):
-    if method == "opencv":
-        img = cv2.imread(input_path, cv2.IMREAD_ANYCOLOR | cv2.IMREAD_ANYDEPTH)
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    else:
-        raise TypeError("unsupported method.")
-    return img
-
-
-def clip_and_convert_rgb_to_srgb(img: np.ndarray):
-    img = np.clip(img, 0, 1)
-    # convert colour to sRGB
-    img = np.where(
-        img <= 0.0031308, 12.92 * img, 1.055 * np.power(img, 1 / 2.4) - 0.055
-    )
-    return img

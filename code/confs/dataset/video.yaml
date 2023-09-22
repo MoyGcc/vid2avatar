@@ -36,8 +36,19 @@ test:
     drop_last: False
     shuffle: False
     worker: 16
-
     num_sample : -1
     pixel_per_batch: 3072
-
     output_img_size: ~
+    normal_map:
+        is_use: True
+    depth_map:
+        is_use: True
+    mesh:
+        is_use: True
+        point_batch: 10000
+    rendering:
+        is_use: True
+    fg_rendering:    
+        is_use: True
+    mask:
+        is_use: True

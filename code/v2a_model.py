@@ -318,29 +318,20 @@ class V2AModel(pl.LightningModule):
             f"fg_rendering/{self.current_epoch}.png", fg_rgb[:, :, ::-1])
 
     def test_step(self, batch, *args, **kwargs):
-        os.makedirs("test_mask", exist_ok=True)
-        os.makedirs("test_rendering", exist_ok=True)
-        os.makedirs("test_fg_rendering", exist_ok=True)
-        os.makedirs("test_normal", exist_ok=True)
-        os.makedirs("test_mesh", exist_ok=True)
-        os.makedirs("test_depth", exist_ok=True)
-        
-        inputs, targets, pixel_per_batch, idx = batch
+        cfg = self.opt.dataset
 
-        img_size = targets["img_size"]
-        output_img_size = targets["output_img_size"]
+        img_size = cfg.metainfo.img_size
+        output_img_size = cfg.test.output_img_size if cfg.test.output_img_size is not None else img_size
+        pixel_per_batch = cfg.test.pixel_per_batch
         
-        idx = int(idx.cpu().numpy())
-        
-        total_pixels = inputs["uv"].size(0) * inputs["uv"].size(1)
+        total_pixels = batch["uv"].size(0) * batch["uv"].size(1)
         num_splits = (total_pixels + pixel_per_batch - 1) // pixel_per_batch
-        results = []
 
         scale, smpl_trans, smpl_pose, smpl_shape = torch.split(
-            inputs["smpl_params"], [1, 3, 72, 10], dim=1
+            batch["smpl_params"], [1, 3, 72, 10], dim=1
         )
 
-        body_model_params = self.body_model_params(inputs["idx"])
+        body_model_params = self.body_model_params(batch["idx"])
         smpl_shape = (
             body_model_params["betas"]
             if body_model_params["betas"].dim() == 2
@@ -357,41 +348,19 @@ class V2AModel(pl.LightningModule):
         smpl_tfs = smpl_outputs["smpl_tfs"]
         cond = {"smpl": smpl_pose[:, 3:] / np.pi}
 
-        # generate mesh
-        # mesh_canonical = generate_mesh(
-        #     lambda x: self.query_oc(x, cond),
-        #     self.model.smpl_server.verts_c[0],
-        #     point_batch=10000,
-        #     res_up=4,
-        # )
-        # self.model.deformer = SMPLDeformer(
-        #     betas=np.load(self.betas_path), gender=self.gender, K=7
-        # )
-        # verts_deformed = self.get_deformed_mesh_fast_mode(
-        #     mesh_canonical.vertices, smpl_tfs
-        # )
-        # mesh_deformed = trimesh.Trimesh(
-        #     vertices=verts_deformed, faces=mesh_canonical.faces, process=False
-        # )
-        # mesh_canonical.export(
-        #     f"test_mesh/{idx:04d}_canonical.ply")
-        # mesh_deformed.export(
-        #     f"test_mesh/{idx:04d}_deformed.ply")
-        # self.model.deformer = SMPLDeformer(
-        #     betas=np.load(self.betas_path), gender=self.gender
-        # )
-        
+        results = []
+
         for i in range(num_splits):
             indices = list(range(i * pixel_per_batch, min((i+1) * pixel_per_batch, total_pixels)))
             batch_inputs = {
-                "uv": inputs["uv"][:, indices],
-                "intrinsics": inputs["intrinsics"],
-                "pose": inputs["pose"],
-                "smpl_params": inputs["smpl_params"],
-                "smpl_pose": inputs["smpl_params"][:, 4:76],
-                "smpl_shape": inputs["smpl_params"][:, 76:],
-                "smpl_trans": inputs["smpl_params"][:, 1:4],
-                "idx": inputs["idx"] if "idx" in inputs.keys() else None,
+                "uv": batch["uv"][:, indices],
+                "intrinsics": batch["intrinsics"],
+                "pose": batch["pose"],
+                "smpl_params": batch["smpl_params"],
+                "smpl_pose": batch["smpl_params"][:, 4:76],
+                "smpl_shape": batch["smpl_params"][:, 76:],
+                "smpl_trans": batch["smpl_params"][:, 1:4],
+                "idx": batch["idx"] if "idx" in batch.keys() else None,
             }
 
             batch_inputs.update(
@@ -419,64 +388,96 @@ class V2AModel(pl.LightningModule):
                     "depth": model_outputs["depth"].detach().clone(),
                 }
             )
+                            
+        if cfg.test.normal_map.is_use:
+            os.makedirs("test_normal", exist_ok=True)
 
-        rgb_pred = torch.cat([result["rgb_values"]
-                             for result in results], dim=0)
-        rgb_pred = rgb_pred.reshape(*output_img_size, -1)
+            normal_pred = torch.cat([result["normal_values"]
+                                    for result in results], dim=0)
+            normal_pred = (normal_pred.reshape(*output_img_size, -1) + 1) / 2
+            normal_pred = torch.cat([normal_pred], dim=0).cpu().numpy()
+            normal_pred = (normal_pred * 255).astype(np.uint8)
+            normal_pred = normal_pred[:, :, ::-1]
 
-        fg_rgb_pred = torch.cat([result["fg_rgb_values"]
-                                for result in results], dim=0)
-        fg_rgb_pred = fg_rgb_pred.reshape(*output_img_size, -1)
+            idx = int(batch['idx'].cpu().numpy())
+            cv2.imwrite(
+                f"test_normal/{idx:04d}.png", normal_pred)
 
-        normal_pred = torch.cat([result["normal_values"]
-                                for result in results], dim=0)
-        normal_pred = (normal_pred.reshape(*output_img_size, -1) + 1) / 2
+        if cfg.test.depth_map.is_use:
+            os.makedirs("test_depth", exist_ok=True)
 
-        pred_mask = torch.cat([result["acc_map"] for result in results], dim=0)
-        pred_mask = pred_mask.reshape(*output_img_size, -1)
+            depth_pred = torch.cat([result["depth"]
+                                    for result in results], dim=0)
+            depth_pred = depth_pred.reshape(*output_img_size, -1)
+            depth_pred = torch.cat([depth_pred], dim=0).cpu().numpy()
 
-        rgb_pred = torch.cat([rgb_pred], dim=0).cpu().numpy()
+            depth_pred = depth_pred / depth_pred.max()  # 0 ~ 1
+            depth_pred = depth_pred * 255
+            depth_pred = depth_pred.astype(np.uint8)
+            depth_pred = depth_pred[:, :, ::-1]
+            # depth = cv2.applyColorMap(depth, cv2.COLORMAP_JET)
 
-        # rgb = targets["rgb"]
+            idx = int(batch['idx'].cpu().numpy())
+            cv2.imwrite(
+                f"test_depth/{idx:04d}.png", depth_pred)
+            
+        if cfg.test.mesh.is_use:
+            os.makedirs("test_mesh", exist_ok=True)
+
+            mesh_canonical = generate_mesh(
+                lambda x: self.query_oc(x, cond),
+                self.model.smpl_server.verts_c[0],
+                point_batch=cfg.test.mesh.point_batch,
+                res_up=4,
+            )
+            verts_deformed = self.get_deformed_mesh_fast_mode(
+                mesh_canonical.vertices, smpl_tfs
+            )
+            mesh_deformed = trimesh.Trimesh(
+                vertices=verts_deformed, faces=mesh_canonical.faces, process=False
+            )
+
+            idx = int(batch['idx'].cpu().numpy())
+            mesh_canonical.export(
+                f"test_mesh/{idx:04d}_canonical.ply")
+            mesh_deformed.export(
+                f"test_mesh/{idx:04d}_deformed.ply")
         
-        if "normal" in results[0].keys():
-            normal_gt = torch.cat(
-                [result["normal"] for result in results], dim=1
-            ).squeeze(0)
-            normal_gt = (normal_gt.reshape(*img_size, -1) + 1) / 2
-            normal = torch.cat([normal_gt, normal_pred], dim=0).cpu().numpy()
-        else:
-            normal = torch.cat([normal_pred], dim=0).cpu().numpy()
+        if cfg.test.rendering.is_use:
+            os.makedirs("test_rendering", exist_ok=True)
 
-        rgb_pred = (rgb_pred * 255).astype(np.uint8)
-
-        fg_rgb = torch.cat([fg_rgb_pred], dim=0).cpu().numpy()
-        fg_rgb = (fg_rgb * 255).astype(np.uint8)
-
-        normal = (normal * 255).astype(np.uint8)
-
-        # depth map
-        depth_pred = torch.cat([result["depth"]
+            rgb_pred = torch.cat([result["rgb_values"]
                                 for result in results], dim=0)
-        depth_pred = depth_pred.reshape(*output_img_size, -1)
-        depth = torch.cat([depth_pred], dim=0).cpu().numpy()
+            rgb_pred = rgb_pred.reshape(*output_img_size, -1)
+            rgb_pred = torch.cat([rgb_pred], dim=0).cpu().numpy()
+            rgb_pred = (rgb_pred * 255).astype(np.uint8)
+            rgb_pred = rgb_pred[:, :, ::-1]
+            
+            idx = int(batch['idx'].cpu().numpy())
+            cv2.imwrite(
+                f"test_rendering/{idx:04d}.png", rgb_pred)
 
-        depth = depth / depth.max()  # 0 ~ 1
-        # depth = depth.clip(0.75, 1.0)  # 0.75 ~ 1
-        # depth = depth * 4 - 3  # 0 ~ 1
-        depth = depth * 255
-        depth = depth.astype(np.uint8)
+        if cfg.test.fg_rendering.is_use:
+            os.makedirs("test_fg_rendering", exist_ok=True)
 
-        # depth = cv2.applyColorMap(depth, cv2.COLORMAP_JET)
-        #
+            fg_rgb_pred = torch.cat([result["fg_rgb_values"]
+                                    for result in results], dim=0)
+            fg_rgb_pred = fg_rgb_pred.reshape(*output_img_size, -1)
+            fg_rgb_pred = torch.cat([fg_rgb_pred], dim=0).cpu().numpy()
+            fg_rgb_pred = (fg_rgb_pred * 255).astype(np.uint8)
+            fg_rgb_pred = fg_rgb_pred[:, :, ::-1]
 
-        cv2.imwrite(
-            f"test_mask/{idx:04d}.png", pred_mask.cpu().numpy() * 255)
-        cv2.imwrite(
-            f"test_rendering/{idx:04d}.png", rgb_pred[:, :, ::-1])
-        cv2.imwrite(
-            f"test_normal/{idx:04d}.png", normal[:, :, ::-1])
-        cv2.imwrite(
-            f"test_fg_rendering/{idx:04d}.png", fg_rgb)
-        cv2.imwrite(
-            f"test_depth/{idx:04d}.png", depth[:, :, ::-1])
+            idx = int(batch['idx'].cpu().numpy())
+            cv2.imwrite(
+                f"test_fg_rendering/{idx:04d}.png", fg_rgb_pred)
+
+        if cfg.test.mask.is_use:
+            os.makedirs("test_mask", exist_ok=True)
+
+            pred_mask = torch.cat([result["acc_map"] for result in results], dim=0)
+            pred_mask = pred_mask.reshape(*output_img_size, -1)
+            pred_mask = pred_mask.cpu().numpy() * 255
+            
+            idx = int(batch['idx'].cpu().numpy())
+            cv2.imwrite(
+                f"test_mask/{idx:04d}.png", pred_mask)

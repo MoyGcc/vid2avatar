@@ -167,7 +167,7 @@ class ValDataset(torch.utils.data.Dataset):
             "pose": inputs["pose"],
             "smpl_params": inputs["smpl_params"],
             "image_id": image_id,
-            "idx": inputs["idx"],
+            "idx": idx,
         }
         images = {
             "rgb": images["rgb"],
@@ -180,7 +180,6 @@ class ValDataset(torch.utils.data.Dataset):
 class TestDataset(torch.utils.data.Dataset):
     def __init__(self, metainfo, split):
         self.dataset = Dataset(metainfo, split)
-        self.pixel_per_batch = split.pixel_per_batch
         if split.output_img_size:
             self.output_img_size = tuple(split.output_img_size)
         else:
@@ -200,15 +199,12 @@ class TestDataset(torch.utils.data.Dataset):
         uv = uv.reshape(-1, 2).astype(np.float32)
 
         inputs, images = data
-        inputs = {
+        data = {
             "uv": uv,
             "intrinsics": inputs["intrinsics"],
             "pose": inputs["pose"],
             "smpl_params": inputs["smpl_params"],
             "idx": inputs["idx"],
+            "rgb": images["rgb"]
         }
-        images = {"rgb": images["rgb"], 
-                "img_size": self.dataset.img_size,
-                "output_img_size": self.output_img_size
-                }
-        return inputs, images, self.pixel_per_batch, idx
+        return data

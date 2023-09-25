@@ -1,5 +1,5 @@
 learning_rate : 5.0e-4
-body_param_learning_rate : 1.0e-4
+body_param_learning_rate : 1.0e-3
 sched_milestones : [200,500]
 sched_factor : 0.5
 smpl_init: False

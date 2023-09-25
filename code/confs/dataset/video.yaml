@@ -1,9 +1,9 @@
 metainfo:
     gender: 'female'
-    data_dir : data_bbox_2d_init_training_no_pose_1e4_scaled_round_mask_xy_flip_bicubic/
-    subject: "data_bbox_2d_init_training_no_pose_1e4_scaled_round_mask_xy_flip_bicubic"
+    data_dir : data_bbox_2d_init_training_no_pose_1e4/
+    subject: "data_bbox_2d_init_training_no_pose_1e4"
     start_frame: 0
-    end_frame: 42
+    end_frame: 41
 
 train:
     type: "Video"
@@ -19,7 +19,7 @@ valid:
     image_id: 0
     batch_size: 1
     drop_last: False
-    shuffle: False
+    shuffle: True
     worker: 8
 
     num_sample : -1

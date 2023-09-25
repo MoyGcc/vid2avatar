@@ -38,8 +38,6 @@ class V2A(nn.Module):
         betas = np.load(betas_path)
         self.use_smpl_deformer = opt.use_smpl_deformer
         self.gender = gender
-        if self.use_smpl_deformer:
-            self.deformer = SMPLDeformer(betas=betas, gender=self.gender)
 
         # pre-defined bounding sphere
         self.sdf_bounding_sphere = 3.0
@@ -54,6 +52,9 @@ class V2A(nn.Module):
             self.sdf_bounding_sphere, inverse_sphere_bg=True, **opt.ray_sampler
         )
         self.smpl_server = SMPLServer(gender=self.gender, betas=betas)
+
+        if self.use_smpl_deformer:
+            self.deformer = SMPLDeformer(smpl=self.smpl_server, betas=betas)
 
         if opt.smpl_init:
             smpl_model_state = torch.load(
@@ -74,12 +75,16 @@ class V2A(nn.Module):
             self.mesh_v_cano, self.mesh_f_cano
         )
 
-    def sdf_func_with_smpl_deformer(self, x, cond, smpl_tfs, smpl_verts):
+    def sdf_func_with_smpl_deformer(self, x, cond, smpl_tfs, smpl_verts, smpl_weights):
         if hasattr(self, "deformer"):
             x_c, outlier_mask = self.deformer.forward(
-                x, smpl_tfs, return_weights=False, inverse=True, smpl_verts=smpl_verts
+                x,
+                smpl_tfs,
+                return_weights=False,
+                inverse=True,
+                smpl_verts=smpl_verts,
+                smpl_weights=smpl_weights,
             )
-            # x_c_freq = utils.frequency_encoding(x_c)
 
             output = self.implicit_network(x_c, cond)[0]
             sdf = output[:, 0:1]
@@ -117,7 +122,8 @@ class V2A(nn.Module):
         camera_pos = input["camera_poses"]
         camera_rotate = input["camera_rotates"]
 
-        scale = input["smpl_params"][:, 0][:, None]
+        scale = input["scale"][:, None].float()
+
         smpl_pose = input["smpl_pose"]
         smpl_shape = input["smpl_shape"]
         smpl_trans = input["smpl_trans"]
@@ -126,9 +132,9 @@ class V2A(nn.Module):
         smpl_tfs = smpl_output["smpl_tfs"]
 
         cond = {"smpl": smpl_pose[:, 3:] / np.pi}
-        if self.training:
-            if input["current_epoch"] < 20 or input["current_epoch"] % 20 == 0:
-                cond = {"smpl": smpl_pose[:, 3:] * 0.0}
+        # if self.training:
+        #     if input["current_epoch"] < 20 or input["current_epoch"] % 20 == 0:
+        #         cond = {"smpl": smpl_pose[:, 3:] * 0.0}
 
         ray_dirs, cam_loc = utils.get_camera_params_equirect(
             uv, camera_pos=camera_pos, camera_rotate=camera_rotate
@@ -146,6 +152,7 @@ class V2A(nn.Module):
             smpl_tfs,
             eval_mode=True,
             smpl_verts=smpl_output["smpl_verts"],
+            smpl_weights=smpl_output["smpl_weights"],
         )
 
         z_vals, z_vals_bg = z_vals
@@ -162,7 +169,11 @@ class V2A(nn.Module):
             canonical_points,
             feature_vectors,
         ) = self.sdf_func_with_smpl_deformer(
-            points_flat, cond, smpl_tfs, smpl_output["smpl_verts"]
+            points_flat,
+            cond,
+            smpl_tfs,
+            smpl_output["smpl_verts"],
+            smpl_output["smpl_weights"],
         )
 
         sdf_output = sdf_output.unsqueeze(1)

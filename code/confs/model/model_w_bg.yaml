@@ -1,8 +1,8 @@
 learning_rate : 5.0e-4
-body_param_learning_rate : 1.0e-4
+body_param_learning_rate : 1.0e-3
 sched_milestones : [200,500]
 sched_factor : 0.5
-smpl_init: True
+smpl_init: False
 is_continue: False
 use_body_parsing: False
 with_bkgd: True
@@ -61,7 +61,7 @@ density:
     params_init: {beta: 0.1}
     beta_min: 0.0001
 ray_sampler:
-    near: 0.5
+    near: 0.0
     N_samples: 64
     N_samples_eval: 128
     N_samples_extra: 32

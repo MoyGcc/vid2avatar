@@ -5,6 +5,7 @@ from torch.nn import functional as F
 import math
 import pytorch3d.transforms as transforms
 from pytorch3d.transforms import euler_angles_to_matrix
+from scipy.interpolate import interp2d
 
 
 def split_input(model_input, total_pixels, n_pixels=10000):
@@ -226,7 +227,7 @@ def equirect_to_spherical(equi):
 
 
 def get_camera_params_equirect(uv, camera_pos, camera_rotate):
-    batch_size, num_samples, _ = uv.shape
+    _, num_samples, _ = uv.shape
     direc_cam = equirect_to_spherical(uv)
 
     camera_pitch = camera_rotate[..., 0]
@@ -237,28 +238,15 @@ def get_camera_params_equirect(uv, camera_pos, camera_rotate):
     yaw = camera_yaw.unsqueeze(-1)
     roll = camera_roll.unsqueeze(-1)
 
-    # direc_cam = direc_cam.view(
-    #     -1, 3
-    # )  # (batch, num_samples, 3) --> (batch * num_samples, 3)
     direc_cam = direc_cam.unsqueeze(-1)
 
     R_world_to_camera = euler_angles_to_matrix(
         torch.cat([roll, pitch, yaw], dim=-1), convention="ZXY"
     )
-    # R_world_to_camera = R.from_euler(
-    #     "zxy", (roll, pitch, yaw), degrees=False
-    # ).as_matrix()
     R_world_to_camera = R_world_to_camera.unsqueeze(1).repeat(1, num_samples, 1, 1)
     direc_world = torch.einsum("bnij,bnjk->bnik", R_world_to_camera, direc_cam).squeeze(
         -1
     )
-    # direc_world = torch.bmm(R_world_to_camera, direc_cam.unsqueeze(-1)).squeeze(-1)
-
-    # direc_world = rotation_roll(direc_cam, roll)
-    # direc_world = rotation_pitch(direc_world, pitch)
-    # direc_world = rotation_yaw(direc_world, yaw)
-
-    # direc_world = direc_world.view(batch_size, num_samples, 3)
 
     return direc_world, camera_pos
 
@@ -439,16 +427,36 @@ def weighted_sampling(data, img_size, num_sample, bbox_ratio=0.9):
     output = {}
     for key, val in data.items():
         if len(val.shape) == 3:
-            new_val = np.stack(
-                [
-                    bilinear_interpolation(indices[:, 0], indices[:, 1], val[:, :, i])
-                    for i in range(val.shape[2])
-                ],
-                axis=-1,
+            # new_val = np.stack(
+            #     [
+            #         bilinear_interpolation(indices[:, 0], indices[:, 1], val[:, :, i])
+            #         for i in range(val.shape[2])
+            #     ],
+            #     axis=-1,
+            # )
+
+            new_val = cv2.remap(
+                src=val.astype(np.float32),
+                map1=(indices[:, 1]).astype(np.float32),
+                map2=(indices[:, 0]).astype(np.float32),
+                interpolation=cv2.INTER_CUBIC,
             )
         else:
-            new_val = bilinear_interpolation(indices[:, 0], indices[:, 1], val)
+            # new_val = np.where(new_val > 0.0, 1.0, 0.0)
+            new_val = val[
+                indices.astype(np.int32)[:, 0], indices.astype(np.int32)[:, 1]
+            ].astype(np.float32)
         new_val = new_val.reshape(-1, *val.shape[2:])
         output[key] = new_val
 
     return output, index_outside
+
+
+def frequency_encoding(x, L=10):
+    encoding = []
+    for i in range(L):
+        encoding.append(torch.sin(math.pi * x * 2**i))
+    for i in range(L):
+        encoding.append(torch.cos(math.pi * x * 2**i))
+    encoding = torch.cat(encoding, dim=-1)
+    return encoding

@@ -5,6 +5,7 @@ import cv2
 import numpy as np
 import torch
 from lib.utils import utils
+from scipy.spatial.transform import Rotation as R
 
 os.environ["OPENCV_IO_ENABLE_OPENEXR"] = "1"
 
@@ -42,6 +43,25 @@ def flip_y_2d_points(points, y_range=[-1.0, 1.0]):
     return new_points
 
 
+def get_right_camera_pos(camera_poses, camera_rotates):
+    right_shift = np.array([0.06, 0, 0])
+
+    right_shifts = []
+    for camera_rotate in camera_rotates:
+        camera_pitch = camera_rotate[..., 0]  # (1,1)
+        camera_yaw = camera_rotate[..., 1]  # (1,1)
+        camera_roll = camera_rotate[..., 2]  # (1,1)
+
+        R_world_to_camera = R.from_euler(
+            "zxy", (camera_roll, camera_pitch, camera_yaw), degrees=False
+        ).as_matrix()
+
+        right_shift_world = np.matmul(R_world_to_camera, right_shift)
+        right_shifts.append(right_shift_world)
+    right_shifts = np.stack(right_shifts)
+    return camera_poses + right_shifts
+
+
 class Dataset(torch.utils.data.Dataset):
     def __init__(self, metainfo, split):
         root = os.path.join(".", metainfo.data_dir)
@@ -50,40 +70,64 @@ class Dataset(torch.utils.data.Dataset):
         self.start_frame = metainfo.start_frame
         self.end_frame = metainfo.end_frame
         self.skip_step = 1
-        self.training_indices = list(
-            range(metainfo.start_frame, metainfo.end_frame, self.skip_step)
-        )
 
         # images
-        img_dir = os.path.join(root, "image")
-        self.img_paths = sorted(glob.glob(f"{img_dir}/*.png"))
+        img_left_dir = os.path.join(root, "image", "left")
+        img_right_dir = os.path.join(root, "image", "right")
+
+        img_left_paths = sorted(glob.glob(f"{img_left_dir}/*.png"))
+        img_right_paths = sorted(glob.glob(f"{img_right_dir}/*.png"))
+
+        assert len(img_left_paths) == len(img_right_paths)
+
+        self.img_paths = sorted(glob.glob(f"{img_left_dir}/*.png")) + sorted(
+            glob.glob(f"{img_right_dir}/*.png")
+        )
 
         # only store the image paths to avoid OOM
-        self.img_paths = [self.img_paths[i] for i in self.training_indices]
-        
         self.img_size = tuple(metainfo.img_size)
-
         self.n_images = len(self.img_paths)
 
         # coarse projected SMPL masks, only for sampling
-        mask_dir = os.path.join(root, "mask")
-        self.mask_paths = sorted(glob.glob(f"{mask_dir}/*.png"))
-        self.mask_paths = [self.mask_paths[i] for i in self.training_indices]
+        mask_left_dir = os.path.join(root, "mask", "left")
+        mask_right_dir = os.path.join(root, "mask", "right")
+        self.mask_paths = sorted(glob.glob(f"{mask_left_dir}/*.png")) + sorted(
+            glob.glob(f"{mask_right_dir}/*.png")
+        )
 
-        self.shape = np.load(os.path.join(root, "mean_shape.npy"))
-        self.poses = np.load(os.path.join(root, "poses.npy"))[self.training_indices]
-        self.trans = np.load(os.path.join(root, "normalize_trans.npy"))[
-            self.training_indices
-        ]
+        # self.shape = np.load(os.path.join(root, "mean_shape.npy"))
+        # self.poses = np.load(os.path.join(root, "poses.npy"))
+        trans = np.load(os.path.join(root, "normalize_trans.npy"))
+
         # cameras
         camera_poses = np.load(os.path.join(root, "camera_pos.npy"))
         camera_rotates = np.load(os.path.join(root, "camera_rotate.npy"))
 
+        assert camera_poses.shape[0] == camera_rotates.shape[0] == len(img_left_paths)
+        self.indices = np.concatenate(
+            [np.arange(camera_poses.shape[0]), np.arange(camera_poses.shape[0])], axis=0
+        )
+        camera_poses_right = get_right_camera_pos(camera_poses, camera_rotates)
+
+        camera_poses = np.concatenate([camera_poses, camera_poses_right], axis=0)
+        camera_rotates = np.concatenate([camera_rotates, camera_rotates], axis=0)
+
+        max_distance_from_camera_to_artist = np.linalg.norm(
+            np.concatenate([trans, trans], axis=0).squeeze(1) - camera_poses, axis=-1
+        ).max()
+
+        scene_bounding_sphere = 3.0
         # self.scale = 1 / scale_mats[0][0, 0]
-        self.scale = 1
+        self.scale = 1 / (
+            max_distance_from_camera_to_artist * 1.1 / scene_bounding_sphere
+        )
 
         self.camera_poses = torch.tensor(camera_poses, dtype=torch.float32)
         self.camera_rotates = torch.tensor(camera_rotates, dtype=torch.float32)
+
+        # normalize
+        # self.trans = self.trans * self.scale
+        self.camera_poses = self.camera_poses * self.scale
 
         # other properties
         self.num_sample = split.num_sample
@@ -106,8 +150,8 @@ class Dataset(torch.utils.data.Dataset):
         mask = cv2.imread(self.mask_paths[idx])
         # preprocess: BGR -> Gray -> Mask
         mask = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
-        dilate_kernel = np.ones((20, 20), np.uint8)
-        mask_for_sampling = cv2.dilate(mask, dilate_kernel)
+        # dilate_kernel = np.ones((20, 20), np.uint8)
+        # mask_for_sampling = cv2.dilate(mask, dilate_kernel)
 
         mask = mask > 0
         mask_for_sampling = mask > 0
@@ -120,12 +164,12 @@ class Dataset(torch.utils.data.Dataset):
         uv = np.stack(np.meshgrid(x, y, indexing="xy"), axis=-1)  # (h, w, 2)
         uv = flip_y_2d_points(uv, y_range=[-0.5, 0.5])
 
-        smpl_params = torch.zeros([86]).float()
-        smpl_params[0] = torch.from_numpy(np.asarray(self.scale)).float()
+        # smpl_params = torch.zeros([86]).float()
+        # smpl_params[0] = torch.from_numpy(np.asarray(self.scale)).float()
 
-        smpl_params[1:4] = torch.from_numpy(self.trans[idx]).float()
-        smpl_params[4:76] = torch.from_numpy(self.poses[idx]).reshape(-1).float()
-        smpl_params[76:] = torch.from_numpy(self.shape).float()
+        # smpl_params[1:4] = torch.from_numpy(self.trans[idx]).float()
+        # smpl_params[4:76] = torch.from_numpy(self.poses[idx]).reshape(-1).float()
+        # smpl_params[76:] = torch.from_numpy(self.shape).float()
 
         if self.num_sample > 0:
             data = {
@@ -144,9 +188,10 @@ class Dataset(torch.utils.data.Dataset):
                 # "pose": self.pose_all[idx],
                 "camera_poses": self.camera_poses[idx],
                 "camera_rotates": self.camera_rotates[idx],
-                "smpl_params": smpl_params,
+                # "smpl_params": smpl_params,
                 # "index_outside": index_outside,
-                "idx": idx,
+                "idx": self.indices[idx],
+                "scale": self.scale,
             }
             images = {
                 "rgb": samples["rgb"].astype(np.float32),
@@ -160,8 +205,9 @@ class Dataset(torch.utils.data.Dataset):
                 # "pose": self.pose_all[idx],
                 "camera_poses": self.camera_poses[idx],
                 "camera_rotates": self.camera_rotates[idx],
-                "smpl_params": smpl_params,
-                "idx": idx,
+                # "smpl_params": smpl_params,
+                "idx": self.indices[idx],
+                "scale": self.scale,
             }
             images = {
                 "rgb": img.reshape(-1, 3).astype(np.float32),
@@ -180,8 +226,7 @@ class ValDataset(torch.utils.data.Dataset):
         return 1
 
     def __getitem__(self, idx):
-        image_id = int(np.random.choice(len(self.dataset), 1))
-        self.data = self.dataset[image_id]
+        self.data = self.dataset[idx]
         inputs, images = self.data
 
         inputs = {
@@ -190,9 +235,9 @@ class ValDataset(torch.utils.data.Dataset):
             "camera_rotates": inputs["camera_rotates"],
             # "intrinsics": inputs["intrinsics"],
             # "pose": inputs["pose"],
-            "smpl_params": inputs["smpl_params"],
-            "image_id": image_id,
+            # "smpl_params": inputs["smpl_params"],
             "idx": idx,
+            "scale": inputs["scale"],
         }
         images = {
             "rgb": images["rgb"],
@@ -232,10 +277,11 @@ class TestDataset(torch.utils.data.Dataset):
             "uv": uv,
             "camera_poses": inputs["camera_poses"],
             "camera_rotates": inputs["camera_rotates"],
-            # "intrinsics": inputs["intrinsics"],
-            # "pose": inputs["pose"],
-            "smpl_params": inputs["smpl_params"],
-            "idx": inputs["idx"],
+            # "smpl_params": inputs["smpl_params"],
+            "idx": idx,
+            "scale": inputs["scale"],
+        }
+        images = {
             "rgb": images["rgb"],
             "mask": images["mask"],           
         }

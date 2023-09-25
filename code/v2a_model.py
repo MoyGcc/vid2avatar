@@ -139,7 +139,7 @@ class V2AModel(pl.LightningModule):
         if self.current_epoch != 0 and self.current_epoch % 10 == 0:
             cond = {"smpl": torch.zeros(1, 69).float().cuda()}
             mesh_canonical = generate_mesh(
-                lambda x: self.query_oc(x, cond),
+                lambda x: self.get_sdf_from_canonical(x, cond),
                 self.model.smpl_server.verts_c[0],
                 point_batch=10000,
                 res_up=2,
@@ -156,30 +156,15 @@ class V2AModel(pl.LightningModule):
             )
         return super().training_epoch_end(outputs)
 
-    def query_oc(self, x, cond):
+    def get_sdf_from_canonical(self, x, cond):
         x = x.reshape(-1, 3)
+        # x = utils.frequency_encoding(x)
         mnfld_pred = self.model.implicit_network(x, cond)[:, :, 0].reshape(-1, 1)
         return {"sdf": mnfld_pred}
 
-    def query_wc(self, x):
-        x = x.reshape(-1, 3)
-        w = self.model.deformer.query_weights(x)
-
-        return w
-
-    def query_od(self, x, cond, smpl_tfs, smpl_verts):
-        x = x.reshape(-1, 3)
-        x_c, _ = self.model.deformer.forward(
-            x, smpl_tfs, return_weights=False, inverse=True, smpl_verts=smpl_verts
-        )
-        output = self.model.implicit_network(x_c, cond)[0]
-        sdf = output[:, 0:1]
-
-        return {"sdf": sdf}
-
-    def get_deformed_mesh_fast_mode(self, verts, smpl_tfs):
+    def get_deformed_mesh_fast_mode(self, verts, smpl_tfs, smpl_weights):
         verts = torch.tensor(verts).cuda().float()
-        weights = self.model.deformer.query_weights(verts)
+        weights = self.model.deformer.query_weights(verts, smpl_weights)
         verts_deformed = (
             skinning(verts.unsqueeze(0), weights, smpl_tfs).data.cpu().numpy()[0]
         )
@@ -191,7 +176,7 @@ class V2AModel(pl.LightningModule):
         inputs["current_epoch"] = self.current_epoch
         self.model.eval()
 
-        body_model_params = self.body_model_params(inputs["image_id"])
+        body_model_params = self.body_model_params(inputs["idx"])
         inputs["smpl_pose"] = torch.cat(
             (body_model_params["global_orient"],
              body_model_params["body_pose"]), dim=1
@@ -201,7 +186,7 @@ class V2AModel(pl.LightningModule):
 
         cond = {"smpl": inputs["smpl_pose"][:, 3:] / np.pi}
         mesh_canonical = generate_mesh(
-            lambda x: self.query_oc(x, cond),
+            lambda x: self.get_sdf_from_canonical(x, cond),
             self.model.smpl_server.verts_c[0],
             point_batch=10000,
             res_up=3,
@@ -317,9 +302,7 @@ class V2AModel(pl.LightningModule):
         total_pixels = batch["uv"].size(0) * batch["uv"].size(1)
         num_splits = (total_pixels + pixel_per_batch - 1) // pixel_per_batch
 
-        scale, smpl_trans, smpl_pose, smpl_shape = torch.split(
-            batch["smpl_params"], [1, 3, 72, 10], dim=1
-        )
+        scale = batch["scale"]
 
         body_model_params = self.body_model_params(batch["idx"])
         smpl_shape = (
@@ -344,15 +327,15 @@ class V2AModel(pl.LightningModule):
             indices = list(range(i * pixel_per_batch, min((i+1) * pixel_per_batch, total_pixels)))
             batch_inputs = {
                 "uv": batch["uv"][:, indices],
-                "camera_poses": batch["camera_poses"],
-                "camera_rotates": batch["camera_rotates"],
                 # "intrinsics": batch["intrinsics"],
                 # "pose": batch["pose"],
-                "smpl_params": batch["smpl_params"],
-                "smpl_pose": batch["smpl_params"][:, 4:76],
-                "smpl_shape": batch["smpl_params"][:, 76:],
-                "smpl_trans": batch["smpl_params"][:, 1:4],
+                "camera_poses": batch["camera_poses"],
+                "camera_rotates": batch["camera_rotates"],
+                "smpl_pose": smpl_pose,
+                "smpl_shape": smpl_shape,
+                "smpl_trans": smpl_trans,
                 "idx": batch["idx"] if "idx" in batch.keys() else None,
+                "scale": scale,                
             }
 
             batch_inputs.update(
@@ -417,13 +400,13 @@ class V2AModel(pl.LightningModule):
             os.makedirs("test_mesh", exist_ok=True)
 
             mesh_canonical = generate_mesh(
-                lambda x: self.query_oc(x, cond),
+                lambda x: self.get_sdf_from_canonical(x, cond),
                 self.model.smpl_server.verts_c[0],
                 point_batch=cfg.test.mesh.point_batch,
                 res_up=4,
             )
             verts_deformed = self.get_deformed_mesh_fast_mode(
-                mesh_canonical.vertices, smpl_tfs
+                mesh_canonical.vertices, smpl_tfs, smpl_outputs["smpl_weights"]
             )
             mesh_deformed = trimesh.Trimesh(
                 vertices=verts_deformed, faces=mesh_canonical.faces, process=False

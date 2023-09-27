@@ -68,7 +68,8 @@ Here are more recent related human body reconstruction projects from our team:
 @inproceedings{guo2023vid2avatar,
       title={Vid2Avatar: 3D Avatar Reconstruction from Videos in the Wild via Self-supervised Scene Decomposition},
       author={Guo, Chen and Jiang, Tianjian and Chen, Xu and Song, Jie and Hilliges, Otmar},    
-      booktitle = {Computer Vision and Pattern Recognition (CVPR)},
-      year      = {2023}
+      booktitle = {Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+      month     = {June},
+      year      = {2023},
     }
 ```

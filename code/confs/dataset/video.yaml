@@ -36,6 +36,8 @@ test:
     num_sample : -1
     pixel_per_batch: 3072
     output_img_size: ~
+    rendering_gt:
+        is_use: True
     normal_map:
         is_use: True
     depth_map:
@@ -49,3 +51,17 @@ test:
         is_use: True
     mask:
         is_use: True
+    relight:
+        is_use: True
+        specular: 0.0
+        diffuse: 0.5
+        ambient: 0.5
+        shininess: 16
+        light_directions: [
+            [1.0, 0.0, 1.0], 
+            [-1.0, 0.0, 1.0]
+        ]
+        light_colors: [
+            [1.0, 1.0, 1.0],
+            [1.0, 1.0, 1.0]
+        ]

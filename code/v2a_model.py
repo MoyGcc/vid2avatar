@@ -14,6 +14,7 @@ from kaolin.ops.mesh import index_vertices_by_faces
 import trimesh
 from lib.model.deformer import skinning
 from lib.utils import utils
+from torch.nn.functional import interpolate
 
 
 class V2AModel(pl.LightningModule):
@@ -363,6 +364,21 @@ class V2AModel(pl.LightningModule):
                     "depth": model_outputs["depth"].detach().clone(),
                 }
             )
+
+        idx = int(batch['idx'].cpu().numpy())
+                
+        if cfg.test.rendering_gt.is_use:
+            # rgb gt
+            os.makedirs("test_rendering_gt", exist_ok=True)
+
+            rgb_gt = batch['rgb']
+            rgb_gt = rgb_gt.reshape(*img_size, -1)
+            rgb_gt = rgb_gt.cpu().numpy()
+            rgb_gt = (rgb_gt * 255).astype(np.uint8)
+            rgb_gt = rgb_gt[:, :, ::-1]
+
+            cv2.imwrite(
+                f"test_rendering_gt/{idx:04d}.png", rgb_gt)
                             
         if cfg.test.normal_map.is_use:
             os.makedirs("test_normal", exist_ok=True)
@@ -374,7 +390,6 @@ class V2AModel(pl.LightningModule):
             normal_pred = (normal_pred * 255).astype(np.uint8)
             normal_pred = normal_pred[:, :, ::-1]
 
-            idx = int(batch['idx'].cpu().numpy())
             cv2.imwrite(
                 f"test_normal/{idx:04d}.png", normal_pred)
 
@@ -392,7 +407,6 @@ class V2AModel(pl.LightningModule):
             depth_pred = depth_pred[:, :, ::-1]
             # depth = cv2.applyColorMap(depth, cv2.COLORMAP_JET)
 
-            idx = int(batch['idx'].cpu().numpy())
             cv2.imwrite(
                 f"test_depth/{idx:04d}.png", depth_pred)
             
@@ -412,7 +426,6 @@ class V2AModel(pl.LightningModule):
                 vertices=verts_deformed, faces=mesh_canonical.faces, process=False
             )
 
-            idx = int(batch['idx'].cpu().numpy())
             mesh_canonical.export(
                 f"test_mesh/{idx:04d}_canonical.ply")
             mesh_deformed.export(
@@ -428,7 +441,6 @@ class V2AModel(pl.LightningModule):
             rgb_pred = (rgb_pred * 255).astype(np.uint8)
             rgb_pred = rgb_pred[:, :, ::-1]
             
-            idx = int(batch['idx'].cpu().numpy())
             cv2.imwrite(
                 f"test_rendering/{idx:04d}.png", rgb_pred)
 
@@ -442,7 +454,6 @@ class V2AModel(pl.LightningModule):
             fg_rgb_pred = (fg_rgb_pred * 255).astype(np.uint8)
             fg_rgb_pred = fg_rgb_pred[:, :, ::-1]
 
-            idx = int(batch['idx'].cpu().numpy())
             cv2.imwrite(
                 f"test_fg_rendering/{idx:04d}.png", fg_rgb_pred)
 
@@ -453,6 +464,84 @@ class V2AModel(pl.LightningModule):
             pred_mask = pred_mask.reshape(*output_img_size, -1)
             pred_mask = pred_mask.cpu().numpy() * 255
             
-            idx = int(batch['idx'].cpu().numpy())
             cv2.imwrite(
                 f"test_mask/{idx:04d}.png", pred_mask)
+
+        if cfg.test.relight.is_use:
+            os.makedirs("test_relight", exist_ok=True)
+            
+            rgb_gt = batch['rgb']
+            uv = batch["uv"]
+            view_dir = utils.equirect_to_spherical(uv)
+
+            normal_pred = torch.cat([result["normal_values"]
+                                    for result in results], dim=0)
+            normal_pred = normal_pred.unsqueeze(0)
+
+            assert(rgb_gt.shape == normal_pred.shape)
+
+            lighting_sum = 0
+            for light_color, light_dir in zip(cfg.test.relight.light_colors, cfg.test.relight.light_directions):
+                light_dir = torch.tensor(light_dir, device=rgb_gt.device)
+                light_dir = light_dir / torch.norm(light_dir)
+                light_dir = light_dir.unsqueeze(0).unsqueeze(0).repeat(*rgb_gt.shape[:2], 1)  # (b, n, 1)
+                light_color = torch.tensor(light_color, device=rgb_gt.device)
+                light_color = light_color.unsqueeze(0).unsqueeze(0).repeat(*rgb_gt.shape[:2], 1)  # (b, n, 1)
+
+                lighting = phong_lighting(normal_pred, 
+                                          light_dir, 
+                                          light_color, 
+                                          view_dir, 
+                                          shininess=cfg.test.relight.shininess,
+                                          ambient=cfg.test.relight.ambient,
+                                          diffuse=cfg.test.relight.diffuse,
+                                          specular=cfg.test.relight.specular)
+            
+                lighting_sum += lighting
+    
+            relighted_rgb = rgb_gt * lighting_sum
+            relighted_rgb = relighted_rgb.clamp(min=0.0, max=1.0)
+
+            relighted_rgb = relighted_rgb.reshape(*output_img_size, -1)
+
+            relighted_rgb = torch.cat([relighted_rgb], dim=0).cpu().numpy()
+            relighted_rgb = (relighted_rgb * 255).astype(np.uint8)
+            relighted_rgb = relighted_rgb[:, :, ::-1]
+
+            cv2.imwrite(
+                f"test_relight/{idx:04d}.png", relighted_rgb)
+            
+
+def phong_lighting(normal_map,
+                   light_dir, 
+                   light_color, 
+                   view_dir, 
+                   specular=1.0,
+                   diffuse=0.8, 
+                   ambient=0.2,
+                   shininess=32):
+    """
+    normal_map (torch.Tensor): (b, n, 3)
+    light_dir (torch.Tensor): (b, n, 3)
+    light_color (torch.Tensor): (b, n, 3)
+    view_dir (torch.Tensor): (b, n, 3)
+    """
+    
+    # Specular
+    reflect_dir = 2 * torch.einsum("bnd,bnd->bn", normal_map, light_dir).unsqueeze(-1) * normal_map - light_dir  # Law of Reflection
+    cos_theta = torch.einsum("bnd,bnd->bn", reflect_dir, -view_dir).unsqueeze(-1)
+    cos_theta = torch.clamp(cos_theta, min=0.0, max=1.0)
+    specular_term = (cos_theta ** shininess)
+    specular_component = specular * specular_term * light_color
+
+    # Diffuse
+    diffuse_term = torch.einsum("bnd,bnd->bn", light_dir, normal_map).unsqueeze(-1)
+    diffuse_term = torch.clamp(diffuse_term, min=0.0, max=1.0)
+    diffuse_component = diffuse * diffuse_term * light_color
+
+    # Ambient
+    ambient_component = ambient * light_color
+    
+    lighting = ambient_component + diffuse_component + specular_component
+    
+    return lighting

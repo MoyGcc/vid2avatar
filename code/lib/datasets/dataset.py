@@ -274,15 +274,13 @@ class TestDataset(torch.utils.data.Dataset):
                 
         inputs, images = data
         data = {
+            "rgb": images["rgb"],
+            "mask": images["mask"],           
             "uv": uv,
             "camera_poses": inputs["camera_poses"],
             "camera_rotates": inputs["camera_rotates"],
             # "smpl_params": inputs["smpl_params"],
             "idx": idx,
             "scale": inputs["scale"],
-        }
-        images = {
-            "rgb": images["rgb"],
-            "mask": images["mask"],           
         }
         return data

@@ -1,9 +1,9 @@
 metainfo:
-    gender: 'female'
-    data_dir : data_bbox_2d_init_training_no_pose_1e4/
-    subject: "data_bbox_2d_init_training_no_pose_1e4"
+    gender: 'male'
+    data_dir : data_tpain/
+    subject: "data_tpain"
     start_frame: 0
-    end_frame: 41
+    end_frame: 500
 
 train:
     type: "Video"

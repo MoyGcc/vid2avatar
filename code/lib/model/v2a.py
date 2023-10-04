@@ -86,9 +86,9 @@ class V2A(nn.Module):
                 smpl_weights=smpl_weights,
             )
 
-            output = self.implicit_network(x_c, cond)[0]
-            sdf = output[:, 0:1]
-            feature = output[:, 1:]
+            output = self.implicit_network(x_c, cond)
+            sdf = output[:, :, 0:1]
+            feature = output[:, :, 1:]
             if not self.training:
                 sdf[outlier_mask] = 4.0  # set a large SDF value for outlier points
 
@@ -342,9 +342,7 @@ class V2A(nn.Module):
             return pnts_c.detach()
         pnts_c.requires_grad_(True)
 
-        pnts_d = self.deformer.forward_skinning(pnts_c.unsqueeze(0), None, tfs).squeeze(
-            0
-        )
+        pnts_d = self.deformer.forward_skinning(pnts_c, None, tfs)
         num_dim = pnts_d.shape[-1]
         grads = []
         for i in range(num_dim):

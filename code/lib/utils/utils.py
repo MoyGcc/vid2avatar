@@ -5,6 +5,7 @@ from torch.nn import functional as F
 import math
 from pytorch3d.transforms import euler_angles_to_matrix
 from scipy.interpolate import interp2d
+import einops
 
 
 def split_input(model_input, total_pixels, n_pixels=10000):
@@ -346,14 +347,37 @@ def rot_to_quat(R):
     return q
 
 
+# def get_sphere_intersections(cam_loc, ray_directions, r=1.0):
+#     # Input: n_rays x 3 ; n_rays x 3
+#     # Output: n_rays x 1, n_rays x 1 (close and far)
+
+#     ray_cam_dot = torch.bmm(
+#         ray_directions.view(-1, 1, 3), cam_loc.view(-1, 3, 1)
+#     ).squeeze(-1)
+#     under_sqrt = ray_cam_dot**2 - (cam_loc.norm(2, 1, keepdim=True) ** 2 - r**2)
+
+#     # sanity check
+#     if (under_sqrt <= 0).sum() > 0:
+#         print("BOUNDING SPHERE PROBLEM!")
+#         exit()
+
+#     sphere_intersections = (
+#         torch.sqrt(under_sqrt) * torch.Tensor([-1, 1]).cuda().float() - ray_cam_dot
+#     )
+#     sphere_intersections = sphere_intersections.clamp_min(0.0)
+
+#     return sphere_intersections
+
+
 def get_sphere_intersections(cam_loc, ray_directions, r=1.0):
     # Input: n_rays x 3 ; n_rays x 3
     # Output: n_rays x 1, n_rays x 1 (close and far)
 
-    ray_cam_dot = torch.bmm(
-        ray_directions.view(-1, 1, 3), cam_loc.view(-1, 3, 1)
-    ).squeeze(-1)
-    under_sqrt = ray_cam_dot**2 - (cam_loc.norm(2, 1, keepdim=True) ** 2 - r**2)
+    cam_loc = einops.rearrange(cam_loc, "b n p -> b n p 1")
+    ray_directions = einops.rearrange(ray_directions, "b n p -> b n 1 p")
+
+    ray_cam_dot = torch.einsum("bnxp, bnpx -> bnx", ray_directions, cam_loc)
+    under_sqrt = ray_cam_dot**2 - (cam_loc.norm(2, -2) ** 2 - r**2)
 
     # sanity check
     if (under_sqrt <= 0).sum() > 0:
@@ -361,7 +385,8 @@ def get_sphere_intersections(cam_loc, ray_directions, r=1.0):
         exit()
 
     sphere_intersections = (
-        torch.sqrt(under_sqrt) * torch.Tensor([-1, 1]).cuda().float() - ray_cam_dot
+        torch.sqrt(under_sqrt) * torch.Tensor([-1, 1]).to(under_sqrt.device)
+        - ray_cam_dot
     )
     sphere_intersections = sphere_intersections.clamp_min(0.0)
 

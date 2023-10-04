@@ -141,8 +141,9 @@ class V2A(nn.Module):
         )
         batch_size, num_pixels, _ = ray_dirs.shape
 
-        cam_loc = cam_loc.unsqueeze(1).repeat(1, num_pixels, 1).reshape(-1, 3)
-        ray_dirs = ray_dirs.reshape(-1, 3)
+        cam_loc = cam_loc.unsqueeze(1).repeat(1, num_pixels, 1)
+        # .reshape(-1, 3)
+        # ray_dirs = ray_dirs.reshape(-1, 3)
 
         z_vals, _ = self.ray_sampler.get_z_vals(
             ray_dirs,
@@ -161,7 +162,7 @@ class V2A(nn.Module):
         N_samples = z_vals.shape[1]
 
         points = cam_loc.unsqueeze(1) + z_vals.unsqueeze(2) * ray_dirs.unsqueeze(1)
-        points_flat = points.reshape(-1, 3)
+        # points_flat = points.reshape(-1, 3)
 
         dirs = ray_dirs.unsqueeze(1).repeat(1, N_samples, 1)
         (
@@ -169,7 +170,7 @@ class V2A(nn.Module):
             canonical_points,
             feature_vectors,
         ) = self.sdf_func_with_smpl_deformer(
-            points_flat,
+            points,
             cond,
             smpl_tfs,
             smpl_output["smpl_verts"],

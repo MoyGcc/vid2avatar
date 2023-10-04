@@ -32,15 +32,17 @@ class UniformSampler(RaySampler):
     def get_z_vals(self, ray_dirs, cam_loc, model):
         if not self.take_sphere_intersection:
             near, far = (
-                self.near * torch.ones(ray_dirs.shape[0], 1).cuda(),
-                self.far * torch.ones(ray_dirs.shape[0], 1).cuda(),
+                self.near * torch.ones(ray_dirs.shape[0], ray_dirs.shape[1], 1).cuda(),
+                self.far * torch.ones(ray_dirs.shape[0], ray_dirs.shape[1], 1).cuda(),
             )
         else:
             sphere_intersections = utils.get_sphere_intersections(
                 cam_loc, ray_dirs, r=self.scene_bounding_sphere
             )
-            near = self.near * torch.ones(ray_dirs.shape[0], 1).cuda()
-            far = sphere_intersections[:, 1:]
+            near = (
+                self.near * torch.ones(ray_dirs.shape[0], ray_dirs.shape[1], 1).cuda()
+            )
+            far = sphere_intersections[:, :, 1:]
 
         t_vals = torch.linspace(0.0, 1.0, steps=self.N_samples).cuda()
         z_vals = near * (1.0 - t_vals) + far * (t_vals)
@@ -126,13 +128,16 @@ class ErrorBoundSampler(RaySampler):
 
         # VolSDF Algorithm 1
         while not_converge and total_iters < self.max_total_iters:
-            points = cam_loc.unsqueeze(1) + samples.unsqueeze(2) * ray_dirs.unsqueeze(1)
-            points_flat = points.reshape(-1, 3)
+            points = cam_loc.unsqueeze(-2) + samples.unsqueeze(-1) * ray_dirs.unsqueeze(
+                -2
+            )
+            # points = cam_loc.unsqueeze(1) + samples.unsqueeze(2) * ray_dirs.unsqueeze(1)
+            # points_flat = points.reshape(-1, 3)
             # Calculating the SDF only for the new sampled points
             model.implicit_network.eval()
             with torch.no_grad():
                 samples_sdf = model.sdf_func_with_smpl_deformer(
-                    points_flat,
+                    points,
                     cond,
                     smpl_tfs,
                     smpl_verts=smpl_verts,

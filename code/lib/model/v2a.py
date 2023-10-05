@@ -102,12 +102,12 @@ class V2A(nn.Module):
 
         distance = torch.sqrt(distance)  # kaolin outputs squared distance
         sign = kaolin.ops.mesh.check_sign(
-            self.mesh_v_cano, self.mesh_f_cano, x_cano.unsqueeze(0)
+            self.mesh_v_cano, self.mesh_f_cano, x_cano
         ).float()
         sign = 1 - 2 * sign
         signed_distance = sign * distance
-        batch_size = x_cano.shape[0] // N_samples
-        signed_distance = signed_distance.reshape(batch_size, N_samples, 1)
+        num_pixels = x_cano.shape[1] // N_samples
+        signed_distance = signed_distance.reshape(batch_size, num_pixels, N_samples, 1)
 
         minimum = torch.min(signed_distance, 1)[0]
         index_off_surface = (minimum > threshold).squeeze(1)
@@ -187,7 +187,9 @@ class V2A(nn.Module):
             ) = self.check_off_in_surface_points_cano_mesh(
                 canonical_points, N_samples, threshold=self.threshold
             )
-            canonical_points = canonical_points.reshape(num_pixels, N_samples, 3)
+            canonical_points = canonical_points.reshape(
+                batch_size, num_pixels, N_samples, 3
+            )
 
             canonical_points = canonical_points.reshape(-1, 3)
 

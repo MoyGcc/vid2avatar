@@ -118,7 +118,7 @@ class ErrorBoundSampler(RaySampler):
         samples, samples_idx = z_vals, None
 
         # Get maximum beta from the upper bound (Lemma 2)
-        dists = z_vals[:, 1:] - z_vals[:, :-1]
+        dists = z_vals[..., 1:] - z_vals[..., :-1]
         bound = (1.0 / (4.0 * torch.log(torch.tensor(self.eps + 1.0)))) * (
             dists**2.0
         ).sum(-1)
@@ -136,13 +136,13 @@ class ErrorBoundSampler(RaySampler):
             # Calculating the SDF only for the new sampled points
             model.implicit_network.eval()
             with torch.no_grad():
-                samples_sdf = model.sdf_func_with_smpl_deformer(
+                samples_sdf, _, _ = model.sdf_func_with_smpl_deformer(
                     points,
                     cond,
                     smpl_tfs,
                     smpl_verts=smpl_verts,
                     smpl_weights=smpl_weights,
-                )[0]
+                )
             model.implicit_network.train()
             if samples_idx is not None:
                 sdf_merge = torch.cat(
@@ -158,11 +158,13 @@ class ErrorBoundSampler(RaySampler):
 
             # Calculating the bound d* (Theorem 1)
             d = sdf.reshape(z_vals.shape)
-            dists = z_vals[:, 1:] - z_vals[:, :-1]
-            a, b, c = dists, d[:, :-1].abs(), d[:, 1:].abs()
+            dists = z_vals[..., 1:] - z_vals[..., :-1]
+            a, b, c = dists, d[..., :-1].abs(), d[..., 1:].abs()
             first_cond = a.pow(2) + b.pow(2) <= c.pow(2)
             second_cond = a.pow(2) + c.pow(2) <= b.pow(2)
-            d_star = torch.zeros(z_vals.shape[0], z_vals.shape[1] - 1).cuda()
+            d_star = torch.zeros(
+                z_vals.shape[0], z_vals.shape[1], z_vals.shape[2] - 1
+            ).cuda()
             d_star[first_cond] = b[first_cond]
             d_star[second_cond] = c[second_cond]
             s = (a + b + c) / 2.0
@@ -170,13 +172,13 @@ class ErrorBoundSampler(RaySampler):
             mask = ~first_cond & ~second_cond & (b + c - a > 0)
             d_star[mask] = (2.0 * torch.sqrt(area_before_sqrt[mask])) / (a[mask])
             d_star = (
-                d[:, 1:].sign() * d[:, :-1].sign() == 1
+                d[..., 1:].sign() * d[..., :-1].sign() == 1
             ) * d_star  # Fixing the sign
 
             # Updating beta using line search
             curr_error = self.get_error_bound(beta0, model, sdf, z_vals, dists, d_star)
             beta[curr_error <= self.eps] = beta0
-            beta_min, beta_max = beta0.unsqueeze(0).repeat(z_vals.shape[0]), beta
+            beta_min, beta_max = beta0.repeat(z_vals.shape[0], z_vals.shape[1]), beta
             for j in range(self.beta_iters):
                 beta_mid = (beta_min + beta_max) / 2.0
                 curr_error = self.get_error_bound(
@@ -189,16 +191,25 @@ class ErrorBoundSampler(RaySampler):
             # Upsample more points
             density = model.density(sdf.reshape(z_vals.shape), beta=beta.unsqueeze(-1))
 
+            # TODO: need to be more clean
+            # TODO: cuda -> to device
             dists = torch.cat(
                 [
                     dists,
-                    torch.tensor([1e10]).cuda().unsqueeze(0).repeat(dists.shape[0], 1),
+                    torch.tensor([1e10])
+                    .cuda()
+                    .unsqueeze(0)
+                    .repeat(dists.shape[0], dists.shape[1], 1),
                 ],
                 -1,
             )
             free_energy = dists * density
             shifted_free_energy = torch.cat(
-                [torch.zeros(dists.shape[0], 1).cuda(), free_energy[:, :-1]], dim=-1
+                [
+                    torch.zeros(dists.shape[0], dists.shape[1], 1).cuda(),
+                    free_energy[..., :-1],
+                ],
+                dim=-1,
             )
             alpha = 1 - torch.exp(-free_energy)
             transmittance = torch.exp(-torch.cumsum(shifted_free_energy, dim=-1))
@@ -218,13 +229,13 @@ class ErrorBoundSampler(RaySampler):
                 bins = z_vals
                 error_per_section = (
                     torch.exp(-d_star / beta.unsqueeze(-1))
-                    * (dists[:, :-1] ** 2.0)
+                    * (dists[..., :-1] ** 2.0)
                     / (4 * beta.unsqueeze(-1) ** 2)
                 )
                 error_integral = torch.cumsum(error_per_section, dim=-1)
                 bound_opacity = (
                     torch.clamp(torch.exp(error_integral), max=1.0e6) - 1.0
-                ) * transmittance[:, :-1]
+                ) * transmittance[..., :-1]
 
                 pdf = bound_opacity + self.add_tiny
                 pdf = pdf / torch.sum(pdf, -1, keepdim=True)
@@ -253,7 +264,7 @@ class ErrorBoundSampler(RaySampler):
                     torch.linspace(0.0, 1.0, steps=N)
                     .cuda()
                     .unsqueeze(0)
-                    .repeat(cdf.shape[0], 1)
+                    .repeat(cdf.shape[0], cdf.shape[1], 1)
                 )
             else:
                 u = torch.rand(list(cdf.shape[:-1]) + [N]).cuda()
@@ -321,13 +332,17 @@ class ErrorBoundSampler(RaySampler):
     def get_error_bound(self, beta, model, sdf, z_vals, dists, d_star):
         density = model.density(sdf.reshape(z_vals.shape), beta=beta)
         shifted_free_energy = torch.cat(
-            [torch.zeros(dists.shape[0], 1).cuda(), dists * density[:, :-1]], dim=-1
+            [
+                torch.zeros(dists.shape[0], dists.shape[1], 1).cuda(),
+                dists * density[..., :-1],
+            ],
+            dim=-1,
         )
         integral_estimation = torch.cumsum(shifted_free_energy, dim=-1)
         error_per_section = torch.exp(-d_star / beta) * (dists**2.0) / (4 * beta**2)
         error_integral = torch.cumsum(error_per_section, dim=-1)
         bound_opacity = (
             torch.clamp(torch.exp(error_integral), max=1.0e6) - 1.0
-        ) * torch.exp(-integral_estimation[:, :-1])
+        ) * torch.exp(-integral_estimation[..., :-1])
 
         return bound_opacity.max(-1)[0]

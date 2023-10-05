@@ -147,12 +147,20 @@ class ErrorBoundSampler(RaySampler):
             if samples_idx is not None:
                 sdf_merge = torch.cat(
                     [
-                        sdf.reshape(-1, z_vals.shape[1] - samples.shape[1]),
-                        samples_sdf.reshape(-1, samples.shape[1]),
+                        sdf.reshape(
+                            z_vals.shape[0],
+                            z_vals.shape[1],
+                            z_vals.shape[2] - samples.shape[2],
+                        ),
+                        samples_sdf.reshape(
+                            samples.shape[0], samples.shape[1], samples.shape[2]
+                        ),
                     ],
                     -1,
                 )
-                sdf = torch.gather(sdf_merge, 1, samples_idx).reshape(-1, 1)
+                sdf = torch.gather(sdf_merge, 2, samples_idx).reshape(
+                    sdf_merge.shape[0], -1, 1
+                )
             else:
                 sdf = samples_sdf
 
@@ -275,9 +283,14 @@ class ErrorBoundSampler(RaySampler):
             above = torch.min((cdf.shape[-1] - 1) * torch.ones_like(inds), inds)
             inds_g = torch.stack([below, above], -1)  # (batch, N_samples, 2)
 
-            matched_shape = [inds_g.shape[0], inds_g.shape[1], cdf.shape[-1]]
-            cdf_g = torch.gather(cdf.unsqueeze(1).expand(matched_shape), 2, inds_g)
-            bins_g = torch.gather(bins.unsqueeze(1).expand(matched_shape), 2, inds_g)
+            matched_shape = [
+                inds_g.shape[0],
+                inds_g.shape[1],
+                inds_g.shape[2],
+                cdf.shape[-1],
+            ]
+            cdf_g = torch.gather(cdf.unsqueeze(2).expand(matched_shape), -1, inds_g)
+            bins_g = torch.gather(bins.unsqueeze(2).expand(matched_shape), -1, inds_g)
 
             denom = cdf_g[..., 1] - cdf_g[..., 0]
             denom = torch.where(denom < 1e-5, torch.ones_like(denom), denom)
@@ -291,8 +304,8 @@ class ErrorBoundSampler(RaySampler):
         z_samples = samples
 
         near, far = (
-            self.near * torch.ones(ray_dirs.shape[0], 1).cuda(),
-            self.far * torch.ones(ray_dirs.shape[0], 1).cuda(),
+            self.near * torch.ones(ray_dirs.shape[0], ray_dirs.shape[1], 1).cuda(),
+            self.far * torch.ones(ray_dirs.shape[0], ray_dirs.shape[1], 1).cuda(),
         )
         if (
             self.inverse_sphere_bg
@@ -303,10 +316,10 @@ class ErrorBoundSampler(RaySampler):
 
         if self.N_samples_extra > 0:
             if model.training:
-                sampling_idx = torch.randperm(z_vals.shape[1])[: self.N_samples_extra]
+                sampling_idx = torch.randperm(z_vals.shape[2])[: self.N_samples_extra]
             else:
                 sampling_idx = torch.linspace(
-                    0, z_vals.shape[1] - 1, self.N_samples_extra
+                    0, z_vals.shape[2] - 1, self.N_samples_extra
                 ).long()
             z_vals_extra = torch.cat([near, far, z_vals[:, sampling_idx]], -1)
         else:

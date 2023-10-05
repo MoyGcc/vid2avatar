@@ -312,7 +312,7 @@ class ErrorBoundSampler(RaySampler):
         ):  # if inverse sphere then need to add the far sphere intersection
             far = utils.get_sphere_intersections(
                 cam_loc, ray_dirs, r=self.scene_bounding_sphere
-            )[:, 1:]
+            )[:, :, 1:]
 
         if self.N_samples_extra > 0:
             if model.training:
@@ -321,15 +321,21 @@ class ErrorBoundSampler(RaySampler):
                 sampling_idx = torch.linspace(
                     0, z_vals.shape[2] - 1, self.N_samples_extra
                 ).long()
-            z_vals_extra = torch.cat([near, far, z_vals[:, sampling_idx]], -1)
+            z_vals_extra = torch.cat([near, far, z_vals[:, :, sampling_idx]], -1)
         else:
             z_vals_extra = torch.cat([near, far], -1)
 
         z_vals, _ = torch.sort(torch.cat([z_samples, z_vals_extra], -1), -1)
 
         # add some of the near surface points
-        idx = torch.randint(z_vals.shape[-1], (z_vals.shape[0],)).cuda()
-        z_samples_eik = torch.gather(z_vals, 1, idx.unsqueeze(-1))
+        idx = torch.randint(
+            z_vals.shape[-1],
+            (
+                z_vals.shape[0],
+                z_vals.shape[1],
+            ),
+        ).cuda()
+        z_samples_eik = torch.gather(z_vals, 2, idx.unsqueeze(-1))
 
         if self.inverse_sphere_bg:
             z_vals_inverse_sphere = self.inverse_sphere_sampler.get_z_vals(

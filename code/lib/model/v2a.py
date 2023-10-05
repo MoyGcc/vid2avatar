@@ -95,8 +95,9 @@ class V2A(nn.Module):
         return sdf, x_c, feature
 
     def check_off_in_surface_points_cano_mesh(self, x_cano, N_samples, threshold=0.05):
+        batch_size = x_cano.size(0)
         distance, _, _ = kaolin.metrics.trianglemesh.point_to_mesh_distance(
-            x_cano.unsqueeze(0).contiguous(), self.mesh_face_vertices
+            x_cano.contiguous(), self.mesh_face_vertices.repeat(batch_size, 1, 1, 1)
         )
 
         distance = torch.sqrt(distance)  # kaolin outputs squared distance
@@ -157,14 +158,14 @@ class V2A(nn.Module):
         )
 
         z_vals, z_vals_bg = z_vals
-        z_max = z_vals[:, -1]
-        z_vals = z_vals[:, :-1]
-        N_samples = z_vals.shape[1]
+        z_max = z_vals[:, :, -1]
+        z_vals = z_vals[:, :, :-1]
+        N_samples = z_vals.shape[2]
 
-        points = cam_loc.unsqueeze(1) + z_vals.unsqueeze(2) * ray_dirs.unsqueeze(1)
+        points = cam_loc.unsqueeze(-2) + z_vals.unsqueeze(-1) * ray_dirs.unsqueeze(-2)
         # points_flat = points.reshape(-1, 3)
 
-        dirs = ray_dirs.unsqueeze(1).repeat(1, N_samples, 1)
+        dirs = ray_dirs.unsqueeze(2).repeat(1, 1, N_samples, 1)
         (
             sdf_output,
             canonical_points,

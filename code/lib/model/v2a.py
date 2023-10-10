@@ -210,14 +210,16 @@ class V2A(nn.Module):
             )
             grad_theta = None
 
-        differentiable_points = differentiable_points.reshape(-1, 3)
-        sdf_output = sdf_output.reshape(-1, 1)
-        view = -dirs.reshape(-1, 3)
-        points_flat = points.reshape(-1, 3)
+        # differentiable_points = differentiable_points.reshape(-1, 3)
+        # sdf_output = sdf_output.reshape(-1, 1)
+        # view = -dirs.reshape(-1, 3)
+        # points_flat = points.reshape(-1, 3)
+
+        view = -dirs
 
         if differentiable_points.shape[0] > 0:
             fg_rgb_flat, others = self.get_rbg_value(
-                points_flat,
+                points,
                 differentiable_points,
                 view,
                 cond,

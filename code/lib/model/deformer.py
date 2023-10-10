@@ -56,7 +56,7 @@ class SMPLDeformer:
         weights, _ = self.query_skinning_weights_smpl_multi(
             xc_flat, smpl_verts=self.smpl_verts[0], smpl_weights=self.smpl_weights
         )
-        x_transformed = skinning(xc, weights, smpl_tfs, inverse=False)
+        x_transformed = skinning(xc_flat, weights, smpl_tfs, inverse=False)
 
         return x_transformed
 

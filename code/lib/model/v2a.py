@@ -163,7 +163,6 @@ class V2A(nn.Module):
         N_samples = z_vals.shape[2]
 
         points = cam_loc.unsqueeze(-2) + z_vals.unsqueeze(-1) * ray_dirs.unsqueeze(-2)
-        # points_flat = points.reshape(-1, 3)
 
         dirs = ray_dirs.unsqueeze(2).repeat(1, 1, N_samples, 1)
         (
@@ -178,7 +177,7 @@ class V2A(nn.Module):
             smpl_output["smpl_weights"],
         )
 
-        sdf_output = sdf_output.unsqueeze(1)
+        sdf_output = sdf_output.reshape(batch_size, num_pixels, N_samples, 1)
 
         if self.training:
             (
@@ -190,8 +189,6 @@ class V2A(nn.Module):
             canonical_points = canonical_points.reshape(
                 batch_size, num_pixels, N_samples, 3
             )
-
-            canonical_points = canonical_points.reshape(-1, 3)
 
             # sample canonical SMPL surface pnts for the eikonal loss
             smpl_verts_c = self.smpl_server.verts_c.repeat(batch_size, 1, 1)
@@ -209,13 +206,14 @@ class V2A(nn.Module):
 
         else:
             differentiable_points = canonical_points.reshape(
-                num_pixels, N_samples, 3
-            ).reshape(-1, 3)
+                batch_size, num_pixels, N_samples, 3
+            )
             grad_theta = None
 
-        sdf_output = sdf_output.reshape(num_pixels, N_samples, 1).reshape(-1, 1)
-        z_vals = z_vals
+        differentiable_points = differentiable_points.reshape(-1, 3)
+        sdf_output = sdf_output.reshape(-1, 1)
         view = -dirs.reshape(-1, 3)
+        points_flat = points.reshape(-1, 3)
 
         if differentiable_points.shape[0] > 0:
             fg_rgb_flat, others = self.get_rbg_value(

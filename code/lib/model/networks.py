@@ -176,7 +176,9 @@ class RenderingNet(nn.Module):
                 view_dirs = self.embedview_fn(view_dirs)
 
         if self.mode == "nerf_frame_encoding":
-            frame_latent_code = frame_latent_code.expand(view_dirs.shape[0], -1)
+            frame_latent_code = frame_latent_code.unsqueeze(1).expand(
+                -1, view_dirs.shape[1], -1
+            )
             rendering_input = torch.cat(
                 [view_dirs, frame_latent_code, feature_vectors], dim=-1
             )

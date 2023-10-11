@@ -110,9 +110,9 @@ class V2A(nn.Module):
         num_pixels = x_cano.shape[1] // N_samples
         signed_distance = signed_distance.reshape(batch_size, num_pixels, N_samples, 1)
 
-        minimum = torch.min(signed_distance, 1)[0]
-        index_off_surface = (minimum > threshold).squeeze(1)
-        index_in_surface = (minimum <= 0.0).squeeze(1)
+        minimum = torch.min(signed_distance, 2)[0]
+        index_off_surface = (minimum > threshold).squeeze(-1)
+        index_in_surface = (minimum <= 0.0).squeeze(-1)
         return index_off_surface, index_in_surface
 
     def forward(self, input):
@@ -178,7 +178,7 @@ class V2A(nn.Module):
             smpl_output["smpl_weights"],
         )
 
-        sdf_output = sdf_output.reshape(batch_size, num_pixels, N_samples, 1)
+        sdf_output = sdf_output.reshape(batch_size, num_pixels, N_samples)
 
         if self.training:
             (
@@ -237,9 +237,7 @@ class V2A(nn.Module):
 
         fg_rgb = fg_rgb_flat.reshape(batch_size, num_pixels, N_samples, 3)
         normal_values = normal_values.reshape(batch_size, num_pixels, N_samples, 3)
-        weights, bg_transmittance = self.volume_rendering(
-            z_vals, z_max, sdf_output.squeeze(-1)
-        )
+        weights, bg_transmittance = self.volume_rendering(z_vals, z_max, sdf_output)
 
         fg_rgb_values = torch.sum(weights.unsqueeze(-1) * fg_rgb, 2)
 
@@ -266,6 +264,8 @@ class V2A(nn.Module):
                 bg_points_flat, {"frame": frame_latent_code}
             )
             bg_sdf = bg_output[..., :1]
+            bg_sdf = bg_sdf.reshape(batch_size, num_pixels, N_bg_samples)
+
             bg_feature_vectors = bg_output[..., 1:]
 
             bg_rendering_output = self.bg_rendering_network(
@@ -274,14 +274,14 @@ class V2A(nn.Module):
             if bg_rendering_output.shape[-1] == 4:
                 bg_rgb_flat = bg_rendering_output[..., :-1]
                 shadow_r = bg_rendering_output[..., -1]
-                bg_rgb = bg_rgb_flat.reshape(-1, N_bg_samples, 3)
-                shadow_r = shadow_r.reshape(-1, N_bg_samples, 1)
+                bg_rgb = bg_rgb_flat.reshape(batch_size, num_pixels, N_bg_samples, 3)
+                shadow_r = shadow_r.reshape(batch_size, num_pixels, N_bg_samples, 1)
                 bg_rgb = (1 - shadow_r) * bg_rgb
             else:
                 bg_rgb_flat = bg_rendering_output
-                bg_rgb = bg_rgb_flat.reshape(-1, N_bg_samples, 3)
+                bg_rgb = bg_rgb_flat.reshape(batch_size, num_pixels, N_bg_samples, 3)
             bg_weights = self.bg_volume_rendering(z_vals_bg, bg_sdf)
-            bg_rgb_values = torch.sum(bg_weights.unsqueeze(-1) * bg_rgb, 1)
+            bg_rgb_values = torch.sum(bg_weights.unsqueeze(-1) * bg_rgb, 2)
         else:
             bg_rgb_values = torch.ones_like(fg_rgb_values, device=fg_rgb_values.device)
 
@@ -289,10 +289,10 @@ class V2A(nn.Module):
         bg_rgb_values = bg_transmittance.unsqueeze(-1) * bg_rgb_values
         rgb_values = fg_rgb_values + bg_rgb_values
 
-        normal_values = torch.sum(weights.unsqueeze(-1) * normal_values, 1)
+        normal_values = torch.sum(weights.unsqueeze(-1) * normal_values, 2)
 
         # Depth map
-        depth = torch.norm(points - cam_loc.unsqueeze(1), dim=-1)
+        depth = torch.norm(points - cam_loc.unsqueeze(2), dim=-1)
         depth = torch.sum(weights * depth, dim=-1)
 
         if self.training:

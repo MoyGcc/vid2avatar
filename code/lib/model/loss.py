@@ -61,8 +61,8 @@ class Loss(nn.Module):
         return mask_loss
 
     def forward(self, model_outputs, ground_truth):
-        nan_filter = ~torch.any(model_outputs["rgb_values"].isnan(), dim=1)
-        rgb_gt = ground_truth["rgb"][0].cuda()
+        nan_filter = ~torch.any(model_outputs["rgb_values"].isnan(), dim=-1)
+        rgb_gt = ground_truth["rgb"].cuda()
 
         # inside_idx = (ground_truth["mask"] > 0).squeeze(0)
         # rgb_inside_loss = self.get_rgb_loss(

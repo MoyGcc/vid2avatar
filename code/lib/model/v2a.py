@@ -326,8 +326,8 @@ class V2A(nn.Module):
         pnts_c = points
         others = {}
 
-        _, gradients, feature_vectors = self.forward_gradient(
-            x, pnts_c, cond, tfs, create_graph=is_training, retain_graph=is_training
+        gradients, feature_vectors = self.forward_gradient(
+            pnts_c, cond, tfs, create_graph=is_training, retain_graph=is_training
         )
         # ensure the gradient is normalized
         normals = nn.functional.normalize(gradients, dim=-1, eps=1e-6)
@@ -339,9 +339,7 @@ class V2A(nn.Module):
         others["normals"] = normals
         return rgb_vals, others
 
-    def forward_gradient(
-        self, x, pnts_c, cond, tfs, create_graph=True, retain_graph=True
-    ):
+    def forward_gradient(self, pnts_c, cond, tfs, create_graph=True, retain_graph=True):
         if pnts_c.shape[0] == 0:
             return pnts_c.detach()
         pnts_c.requires_grad_(True)
@@ -362,6 +360,7 @@ class V2A(nn.Module):
             )[0]
             grads.append(grad)
         grads = torch.stack(grads, dim=-2)
+        grads = einops.rearrange(grads, "b n s i j -> b (n s) i j")
         grads_inv = grads.inverse()
 
         # pnts_c_freq = utils.frequency_encoding(pnts_c)
@@ -380,15 +379,7 @@ class V2A(nn.Module):
             only_inputs=True,
         )[0]
 
-        grads_inv = einops.rearrange(grads_inv, "b n s i j -> b (n s) i j")
-
-        return (
-            grads.reshape(grads.shape[0], -1),
-            torch.nn.functional.normalize(
-                torch.einsum("bni,bnij->bnj", gradients, grads_inv), dim=-1
-            ),
-            feature,
-        )
+        return torch.einsum("bni,bnij->bnj", gradients, grads_inv), feature
 
     def volume_rendering(self, z_vals, z_max, sdf):
         density_flat = self.density(sdf)

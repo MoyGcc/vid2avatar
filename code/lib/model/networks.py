@@ -181,12 +181,8 @@ class RenderingNet(nn.Module):
                 [view_dirs, frame_latent_code, feature_vectors], dim=-1
             )
         elif self.mode == "pose":
-            num_points = points.shape[0]
-            body_pose = (
-                body_pose.unsqueeze(1)
-                .expand(-1, num_points, -1)
-                .reshape(num_points, -1)
-            )
+            num_points = points.shape[1]
+            body_pose = body_pose.unsqueeze(1).expand(-1, num_points, -1)
             body_pose = self.lin_pose(body_pose)
             rendering_input = torch.cat(
                 [points, normals, body_pose, feature_vectors], dim=-1

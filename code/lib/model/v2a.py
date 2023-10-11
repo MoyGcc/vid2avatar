@@ -15,6 +15,7 @@ from torch.autograd import grad
 import hydra
 import kaolin
 from kaolin.ops.mesh import index_vertices_by_faces
+import einops
 
 
 class V2A(nn.Module):
@@ -350,7 +351,7 @@ class V2A(nn.Module):
         grads = []
         for i in range(num_dim):
             d_out = torch.zeros_like(pnts_d, requires_grad=False, device=pnts_d.device)
-            d_out[:, i] = 1
+            d_out[:, :, i] = 1
             grad = torch.autograd.grad(
                 outputs=pnts_d,
                 inputs=pnts_c,
@@ -364,10 +365,11 @@ class V2A(nn.Module):
         grads_inv = grads.inverse()
 
         # pnts_c_freq = utils.frequency_encoding(pnts_c)
-        output = self.implicit_network(pnts_c, cond)[0]
-        sdf = output[:, :1]
+        pnts_c = einops.rearrange(pnts_c, "b n s p -> b (n s) p")
+        output = self.implicit_network(pnts_c, cond)
+        sdf = output[..., :1]
 
-        feature = output[:, 1:]
+        feature = output[..., 1:]
         d_output = torch.ones_like(sdf, requires_grad=False, device=sdf.device)
         gradients = torch.autograd.grad(
             outputs=sdf,
@@ -378,10 +380,12 @@ class V2A(nn.Module):
             only_inputs=True,
         )[0]
 
+        grads_inv = einops.rearrange(grads_inv, "b n s i j -> b (n s) i j")
+
         return (
             grads.reshape(grads.shape[0], -1),
             torch.nn.functional.normalize(
-                torch.einsum("bi,bij->bj", gradients, grads_inv), dim=1
+                torch.einsum("bni,bnij->bnj", gradients, grads_inv), dim=-1
             ),
             feature,
         )

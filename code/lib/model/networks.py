@@ -83,7 +83,7 @@ class ImplicitNet(nn.Module):
         if num_batch * num_point == 0:
             return input
 
-        input = input.reshape(num_batch * num_point, num_dim)
+        # input = input.reshape(num_batch * num_point, num_dim)
 
         if self.cond != "none":
             num_batch, num_cond = cond[self.cond].shape
@@ -92,7 +92,7 @@ class ImplicitNet(nn.Module):
                 cond[self.cond].unsqueeze(1).expand(num_batch, num_point, num_cond)
             )
 
-            input_cond = input_cond.reshape(num_batch * num_point, num_cond)
+            # input_cond = input_cond.reshape(num_batch * num_point, num_cond)
 
             if self.dim_pose_embed:
                 input_cond = self.lin_p0(input_cond)
@@ -107,12 +107,12 @@ class ImplicitNet(nn.Module):
             if self.cond != "none" and l in self.cond_layer:
                 x = torch.cat([x, input_cond], dim=-1)
             if l in self.skip_in:
-                x = torch.cat([x, input], 1) / np.sqrt(2)
+                x = torch.cat([x, input], dim=-1) / np.sqrt(2)
             x = lin(x)
             if l < self.num_layers - 2:
                 x = self.softplus(x)
 
-        x = x.reshape(num_batch, num_point, -1)
+        # x = x.reshape(num_batch, num_point, -1)
 
         return x
 

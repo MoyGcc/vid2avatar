@@ -205,7 +205,7 @@ class ErrorBoundSampler(RaySampler):
                 [
                     dists,
                     torch.tensor([1e10])
-                    .cuda()
+                    .to(dists.device)
                     .unsqueeze(0)
                     .repeat(dists.shape[0], dists.shape[1], 1),
                 ],
@@ -214,7 +214,7 @@ class ErrorBoundSampler(RaySampler):
             free_energy = dists * density
             shifted_free_energy = torch.cat(
                 [
-                    torch.zeros(dists.shape[0], dists.shape[1], 1).cuda(),
+                    torch.zeros(dists.shape[0], dists.shape[1], 1).to(dists.device),
                     free_energy[..., :-1],
                 ],
                 dim=-1,
@@ -270,7 +270,7 @@ class ErrorBoundSampler(RaySampler):
             ):
                 u = (
                     torch.linspace(0.0, 1.0, steps=N)
-                    .cuda()
+                    .to(cdf.device)
                     .unsqueeze(0)
                     .repeat(cdf.shape[0], cdf.shape[1], 1)
                 )
@@ -352,7 +352,7 @@ class ErrorBoundSampler(RaySampler):
         density = model.density(sdf.reshape(z_vals.shape), beta=beta)
         shifted_free_energy = torch.cat(
             [
-                torch.zeros(dists.shape[0], dists.shape[1], 1).cuda(),
+                torch.zeros(dists.shape[0], dists.shape[1], 1).to(dists.device),
                 dists * density[..., :-1],
             ],
             dim=-1,

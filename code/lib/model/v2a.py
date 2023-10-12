@@ -144,8 +144,6 @@ class V2A(nn.Module):
         batch_size, num_pixels, _ = ray_dirs.shape
 
         cam_loc = cam_loc.unsqueeze(1).repeat(1, num_pixels, 1)
-        # .reshape(-1, 3)
-        # ray_dirs = ray_dirs.reshape(-1, 3)
 
         z_vals, _ = self.ray_sampler.get_z_vals(
             ray_dirs,
@@ -178,7 +176,7 @@ class V2A(nn.Module):
             smpl_output["smpl_weights"],
         )
 
-        sdf_output = sdf_output.reshape(batch_size, num_pixels, N_samples)
+        sdf_output = sdf_output.squeeze(-1).reshape(batch_size, num_pixels, N_samples)
 
         if self.training:
             (

@@ -146,14 +146,7 @@ class V2A(nn.Module):
         cam_loc = cam_loc.unsqueeze(1).repeat(1, num_pixels, 1)
 
         z_vals, _ = self.ray_sampler.get_z_vals(
-            ray_dirs,
-            cam_loc,
-            self,
-            cond,
-            smpl_tfs,
-            eval_mode=True,
-            smpl_verts=smpl_output["smpl_verts"],
-            smpl_weights=smpl_output["smpl_weights"],
+            ray_dirs, cam_loc, self, cond, smpl_output
         )
 
         z_vals, z_vals_bg = z_vals

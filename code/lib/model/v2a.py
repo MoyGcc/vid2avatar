@@ -63,14 +63,9 @@ class V2A(nn.Module):
             )
             self.implicit_network.load_state_dict(smpl_model_state["model_state_dict"])
 
-        self.smpl_v_cano = self.smpl_server.verts_c
-        self.smpl_f_cano = torch.tensor(
-            self.smpl_server.smpl.faces.astype(np.int64), device=self.smpl_v_cano.device
-        )
-
         self.mesh_v_cano = self.smpl_server.verts_c
         self.mesh_f_cano = torch.tensor(
-            self.smpl_server.smpl.faces.astype(np.int64), device=self.smpl_v_cano.device
+            self.smpl_server.smpl.faces.astype(np.int64), device=self.mesh_v_cano.device
         )
         self.mesh_face_vertices = index_vertices_by_faces(
             self.mesh_v_cano, self.mesh_f_cano
@@ -103,7 +98,7 @@ class V2A(nn.Module):
 
         distance = torch.sqrt(distance)  # kaolin outputs squared distance
         sign = kaolin.ops.mesh.check_sign(
-            self.mesh_v_cano, self.mesh_f_cano, x_cano
+            self.mesh_v_cano.repeat(batch_size, 1, 1), self.mesh_f_cano, x_cano
         ).float()
         sign = 1 - 2 * sign
         signed_distance = sign * distance
@@ -342,7 +337,7 @@ class V2A(nn.Module):
             return pnts_c.detach()
         pnts_c.requires_grad_(True)
 
-        pnts_d = self.deformer.forward_skinning(pnts_c, None, tfs)
+        pnts_d = self.deformer.forward_skinning(pnts_c, tfs)
         num_dim = pnts_d.shape[-1]
         grads = []
         for i in range(num_dim):

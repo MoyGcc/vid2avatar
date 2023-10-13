@@ -54,7 +54,7 @@ class SMPLDeformer:
 
         return x_transformed, outlier_mask
 
-    def forward_skinning(self, xc, cond, smpl_tfs):
+    def forward_skinning(self, xc, smpl_tfs):
         batch_size = xc.size(0)
         weights, _ = self.query_skinning_weights_smpl_multi(
             xc,
@@ -67,7 +67,6 @@ class SMPLDeformer:
 
     def query_skinning_weights_smpl_multi(self, pts, smpl_verts, smpl_weights):
         batch_size = pts.size(0)
-        # pts_flat = einops.rearrange(pts, "b n s p -> b (n s) p")
         distance_batch, index_batch, neighbor_points = ops.knn_points(
             pts,
             smpl_verts,
@@ -78,13 +77,11 @@ class SMPLDeformer:
         weights_conf = torch.exp(-distance_batch)
         distance_batch = torch.sqrt(distance_batch)
         weights_conf = weights_conf / weights_conf.sum(-1, keepdim=True)
-        # index_batch = index_batch[0]
 
         weights = []
         for i in range(batch_size):
             weights.append(smpl_weights[i, index_batch[i]])
         weights = torch.stack(weights, dim=0)
-        # weights = smpl_weights[:, index_batch, :]
         weights = torch.sum(weights * weights_conf.unsqueeze(-1), dim=-2).detach()
 
         outlier_mask = (distance_batch[..., 0] > self.max_dist).unsqueeze(-1)
@@ -95,24 +92,6 @@ class SMPLDeformer:
             xc, None, return_weights=True, inverse=False, smpl_weights=smpl_weights
         )
         return weights
-
-    # def forward_skinning_normal(self, xc, normal, cond, tfs, inverse=False):
-    #     if normal.ndim == 2:
-    #         normal = normal.unsqueeze(0)
-    #     w = self.query_weights(xc[0], cond)
-
-    #     p_h = F.pad(normal, (0, 1), value=0)
-
-    #     if inverse:
-    #         # p:num_point, n:num_bone, i,j: num_dim+1
-    #         tf_w = torch.einsum("bpn,bnij->bpij", w.double(), tfs.double())
-    #         p_h = torch.einsum("bpij,bpj->bpi", tf_w.inverse(), p_h.double()).float()
-    #     else:
-    #         p_h = torch.einsum(
-    #             "bpn, bnij, bpj->bpi", w.double(), tfs.double(), p_h.double()
-    #         ).float()
-
-    #     return p_h[:, :, :3]
 
 
 def skinning(x, w, tfs, inverse=False):

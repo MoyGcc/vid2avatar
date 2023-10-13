@@ -135,24 +135,24 @@ class V2AModel(pl.LightningModule):
 
     def training_epoch_end(self, outputs) -> None:
         # Canonical mesh update every 10 epochs
-        if self.current_epoch != 0 and self.current_epoch % 10 == 0:
-            cond = {"smpl": torch.zeros(1, 69).float().cuda()}
-            mesh_canonical = generate_mesh(
-                lambda x: self.get_sdf_from_canonical(x, cond),
-                self.model.smpl_server.verts_c[0],
-                point_batch=10000,
-                res_up=2,
-            )
-            self.model.mesh_v_cano = torch.tensor(
-                mesh_canonical.vertices[None], device=self.model.smpl_v_cano.device
-            ).float()
-            self.model.mesh_f_cano = torch.tensor(
-                mesh_canonical.faces.astype(np.int64),
-                device=self.model.smpl_v_cano.device,
-            )
-            self.model.mesh_face_vertices = index_vertices_by_faces(
-                self.model.mesh_v_cano, self.model.mesh_f_cano
-            )
+        # if self.current_epoch != 0 and self.current_epoch % 10 == 0:
+        cond = {"smpl": torch.zeros(1, 69).float().cuda()}
+        mesh_canonical = generate_mesh(
+            lambda x: self.get_sdf_from_canonical(x, cond),
+            self.model.smpl_server.verts_c[0],
+            point_batch=10000,
+            res_up=2,
+        )
+        self.model.mesh_v_cano = torch.tensor(
+            mesh_canonical.vertices[None], device=self.model.mesh_v_cano.device
+        ).float()
+        self.model.mesh_f_cano = torch.tensor(
+            mesh_canonical.faces.astype(np.int64),
+            device=self.model.mesh_v_cano.device,
+        )
+        self.model.mesh_face_vertices = index_vertices_by_faces(
+            self.model.mesh_v_cano, self.model.mesh_f_cano
+        )
         return super().training_epoch_end(outputs)
 
     def get_sdf_from_canonical(self, x, cond):

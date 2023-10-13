@@ -80,9 +80,10 @@ class V2A(nn.Module):
         )
 
     def sdf_func_with_smpl_deformer(self, x, cond, smpl_tfs, smpl_verts, smpl_weights):
+        x_flat = einops.rearrange(x, "b n s p -> b (n s) p")
         if hasattr(self, "deformer"):
             x_c, outlier_mask = self.deformer.forward(
-                x,
+                x_flat,
                 smpl_tfs,
                 return_weights=False,
                 inverse=True,

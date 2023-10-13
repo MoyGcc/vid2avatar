@@ -103,14 +103,17 @@ class Dataset(torch.utils.data.Dataset):
         camera_poses = np.load(os.path.join(root, "camera_pos.npy"))
         camera_rotates = np.load(os.path.join(root, "camera_rotate.npy"))
 
-        assert camera_poses.shape[0] == camera_rotates.shape[0] == len(img_left_paths)
+        assert camera_poses.shape[0] == camera_rotates.shape[0] == len(
+            img_left_paths)
         self.indices = np.concatenate(
             [np.arange(camera_poses.shape[0]), np.arange(camera_poses.shape[0])], axis=0
         )
         camera_poses_right = get_right_camera_pos(camera_poses, camera_rotates)
 
-        camera_poses = np.concatenate([camera_poses, camera_poses_right], axis=0)
-        camera_rotates = np.concatenate([camera_rotates, camera_rotates], axis=0)
+        camera_poses = np.concatenate(
+            [camera_poses, camera_poses_right], axis=0)
+        camera_rotates = np.concatenate(
+            [camera_rotates, camera_rotates], axis=0)
 
         max_distance_from_camera_to_artist = np.linalg.norm(
             np.concatenate([trans, trans], axis=0).squeeze(1) - camera_poses, axis=-1
@@ -139,9 +142,9 @@ class Dataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         # normalize RGB
         img = cv2.imread(self.img_paths[idx])
-        
+
         # preprocess: BGR -> RGB -> Normalize
-        
+
         img = img[:, :, ::-1] / 255
 
         # img = utils.read_image(self.img_paths[idx])
@@ -243,7 +246,6 @@ class ValDataset(torch.utils.data.Dataset):
             "rgb": images["rgb"],
             "img_size": images["img_size"],
             "pixel_per_batch": self.pixel_per_batch,
-            "total_pixels": self.total_pixels,
             "mask": images["mask"],
         }
         return inputs, images
@@ -271,11 +273,11 @@ class TestDataset(torch.utils.data.Dataset):
         uv = np.stack([u, v], axis=-1)  # (h, w, 2)
         uv = flip_y_2d_points(uv, y_range=[-0.5, 0.5])
         uv = uv.reshape(-1, 2).astype(np.float32)
-                
+
         inputs, images = data
         data = {
             "rgb": images["rgb"],
-            "mask": images["mask"],           
+            "mask": images["mask"],
             "uv": uv,
             "camera_poses": inputs["camera_poses"],
             "camera_rotates": inputs["camera_rotates"],

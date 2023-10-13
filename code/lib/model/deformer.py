@@ -19,7 +19,8 @@ class SMPLDeformer:
         cano_scale, cano_transl, cano_thetas, cano_betas = torch.split(
             smpl_params_canoical, [1, 3, 72, 10], dim=1
         )
-        smpl_output = self.smpl(cano_scale, cano_transl, cano_thetas, cano_betas)
+        smpl_output = self.smpl(cano_scale, cano_transl,
+                                cano_thetas, cano_betas)
         self.smpl_verts = smpl_output["smpl_verts"]
         self.smpl_weights = smpl_output["smpl_weights"]
 
@@ -34,23 +35,22 @@ class SMPLDeformer:
     ):
         if x.shape[0] == 0:
             return x
-        x_flat = einops.rearrange(x, "b n s p -> b (n s) p")
-        batch_size = x_flat.size(0)
+        batch_size = x.size(0)
         if smpl_verts is None or smpl_weights is None:
             weights, outlier_mask = self.query_skinning_weights_smpl_multi(
-                x_flat,
+                x,
                 smpl_verts=self.smpl_verts.repeat(batch_size, 1, 1),
                 smpl_weights=self.smpl_weights.repeat(batch_size, 1, 1),
             )
         else:
             # TODO: check which smpl weights to use
             weights, outlier_mask = self.query_skinning_weights_smpl_multi(
-                x_flat, smpl_verts=smpl_verts, smpl_weights=smpl_weights
+                x, smpl_verts=smpl_verts, smpl_weights=smpl_weights
             )
         if return_weights:
             return weights
 
-        x_transformed = skinning(x_flat, weights, smpl_tfs, inverse=inverse)
+        x_transformed = skinning(x, weights, smpl_tfs, inverse=inverse)
 
         return x_transformed, outlier_mask
 
@@ -82,7 +82,8 @@ class SMPLDeformer:
         for i in range(batch_size):
             weights.append(smpl_weights[i, index_batch[i]])
         weights = torch.stack(weights, dim=0)
-        weights = torch.sum(weights * weights_conf.unsqueeze(-1), dim=-2).detach()
+        weights = torch.sum(
+            weights * weights_conf.unsqueeze(-1), dim=-2).detach()
 
         outlier_mask = (distance_batch[..., 0] > self.max_dist).unsqueeze(-1)
         return weights, outlier_mask
@@ -109,7 +110,7 @@ def skinning(x, w, tfs, inverse=False):
         # p:n_point, n:n_bone, i,k: n_dim+1
         w_tf = torch.einsum("bpn,bnij->bpij", w, tfs)
         w_tf_inverse = w_tf.inverse()
-        
+
         x_h = torch.einsum("bpij,bpj->bpi", w_tf_inverse, x_h)
     else:
         x_h = torch.einsum("bpn,bnij,bpj->bpi", w, tfs, x_h)

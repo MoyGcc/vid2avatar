@@ -1,8 +1,8 @@
+import einops
 import pytorch_lightning as pl
 import torch.optim as optim
 from lib.model.v2a import V2A
 from lib.model.body_model_params import BodyModelParams
-from lib.model.deformer import SMPLDeformer
 import cv2
 import torch
 from lib.model.loss import Loss
@@ -140,8 +140,6 @@ class V2AModel(pl.LightningModule):
         return loss_output["loss"]
 
     def training_epoch_end(self, outputs) -> None:
-        # Canonical mesh update every 10 epochs
-        # if self.current_epoch != 0 and self.current_epoch % 10 == 0:
         cond = {"smpl": torch.zeros(1, 69).float().cuda()}
         mesh_canonical = generate_mesh(
             lambda x: self.get_sdf_from_canonical(x, cond),
@@ -163,15 +161,13 @@ class V2AModel(pl.LightningModule):
 
     def get_sdf_from_canonical(self, x, cond):
         x = x.view(-1, 3)
-        # x = utils.frequency_encoding(x)
         mnfld_pred = self.model.implicit_network(x, cond)[:, :, 0].view(-1, 1)
         return {"sdf": mnfld_pred}
 
     def get_deformed_mesh_fast_mode(self, verts, smpl_tfs, smpl_weights):
-        verts = torch.tensor(verts).cuda().float()
         weights = self.model.deformer.query_weights(verts, smpl_weights)
         verts_deformed = (
-            skinning(verts.unsqueeze(0), weights,
+            skinning(verts, weights,
                      smpl_tfs).data.cpu().numpy()[0]
         )
         return verts_deformed
@@ -248,10 +244,7 @@ class V2AModel(pl.LightningModule):
     def validation_step_end(self, batch_parts):
         return batch_parts
 
-    def on_validation_epoch_end(self) -> None:
-
-        outputs = self.validation_step_outputs
-
+    def validation_epoch_end(self, outputs) -> None:
         img_size = outputs[0]["img_size"]
 
         rgb_pred = torch.cat([output["rgb_values"]
@@ -334,8 +327,6 @@ class V2AModel(pl.LightningModule):
                            min((i+1) * pixel_per_batch, total_pixels)))
             batch_inputs = {
                 "uv": batch["uv"][:, indices],
-                # "intrinsics": batch["intrinsics"],
-                # "pose": batch["pose"],
                 "camera_poses": batch["camera_poses"],
                 "camera_rotates": batch["camera_rotates"],
                 "smpl_pose": smpl_pose,
@@ -425,8 +416,10 @@ class V2AModel(pl.LightningModule):
                 point_batch=cfg.test.mesh.point_batch,
                 res_up=4,
             )
+            verts = torch.tensor(mesh_canonical.vertices, device=batch["uv"].device,
+                                 dtype=torch.float).unsqueeze(0)
             verts_deformed = self.get_deformed_mesh_fast_mode(
-                mesh_canonical.vertices, smpl_tfs, smpl_outputs["smpl_weights"]
+                verts, smpl_tfs, smpl_outputs["smpl_weights"]
             )
             mesh_deformed = trimesh.Trimesh(
                 vertices=verts_deformed, faces=mesh_canonical.faces, process=False
@@ -483,7 +476,7 @@ class V2AModel(pl.LightningModule):
 
             normal_pred = torch.cat([result["normal_values"]
                                     for result in results], dim=0)
-            normal_pred = normal_pred.unsqueeze(0)
+            normal_pred = normal_pred.reshape(1, -1, 3)
 
             assert (rgb_gt.shape == normal_pred.shape)
 

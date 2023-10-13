@@ -1,14 +1,14 @@
 metainfo:
     gender: 'male'
-    data_dir : data_tpain/
-    subject: "data_tpain"
+    data_dir : data_tpain_12fps/
+    subject: "data_tpain_12fps"
     start_frame: 0
-    end_frame: 500
+    end_frame: 100
     img_size: [960, 960]
 
 train:
     type: "Video"
-    batch_size: 2
+    batch_size: 6
     drop_last: False
     shuffle: True
     worker: 8

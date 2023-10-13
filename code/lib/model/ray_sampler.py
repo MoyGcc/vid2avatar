@@ -100,17 +100,11 @@ class ErrorBoundSampler(RaySampler):
                 1.0, 0.0, N_samples_inverse_sphere, False, far=1.0
             )
 
-    def get_z_vals(
-        self,
-        ray_dirs,
-        cam_loc,
-        model,
-        cond,
-        smpl_tfs,
-        eval_mode,
-        smpl_verts,
-        smpl_weights,
-    ):
+    def get_z_vals(self, ray_dirs, cam_loc, model, cond, smpl_output):
+        smpl_tfs = smpl_output["smpl_tfs"]
+        smpl_verts = smpl_output["smpl_verts"]
+        smpl_weights = smpl_output["smpl_weights"]
+
         beta0 = model.density.get_beta().detach()
 
         # Start with uniform sampling

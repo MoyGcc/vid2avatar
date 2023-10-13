@@ -132,7 +132,7 @@ class ErrorBoundSampler(RaySampler):
                 -2
             )
             # points = cam_loc.unsqueeze(1) + samples.unsqueeze(2) * ray_dirs.unsqueeze(1)
-            # points_flat = points.reshape(-1, 3)
+            # points_flat = points.view(-1, 3)
             # Calculating the SDF only for the new sampled points
             model.implicit_network.eval()
             with torch.no_grad():
@@ -144,28 +144,31 @@ class ErrorBoundSampler(RaySampler):
                     smpl_weights=smpl_weights,
                 )
             model.implicit_network.train()
+
             if samples_idx is not None:
                 sdf_merge = torch.cat(
                     [
-                        sdf.reshape(
+                        sdf.squeeze(-1).view(
                             z_vals.shape[0],
                             z_vals.shape[1],
                             z_vals.shape[2] - samples.shape[2],
                         ),
-                        samples_sdf.reshape(
+                        samples_sdf.squeeze(-1).view(
                             samples.shape[0], samples.shape[1], samples.shape[2]
                         ),
                     ],
                     -1,
                 )
-                sdf = torch.gather(sdf_merge, 2, samples_idx).reshape(
-                    sdf_merge.shape[0], -1, 1
+                sdf = (
+                    torch.gather(sdf_merge, 2, samples_idx)
+                    .view(sdf_merge.shape[0], -1)
+                    .unsqueeze(-1)
                 )
             else:
                 sdf = samples_sdf
 
             # Calculating the bound d* (Theorem 1)
-            d = sdf.reshape(z_vals.shape)
+            d = sdf.squeeze(-1).view(z_vals.shape)
             dists = z_vals[..., 1:] - z_vals[..., :-1]
             a, b, c = dists, d[..., :-1].abs(), d[..., 1:].abs()
             first_cond = a.pow(2) + b.pow(2) <= c.pow(2)
@@ -197,7 +200,7 @@ class ErrorBoundSampler(RaySampler):
             beta = beta_max
 
             # Upsample more points
-            density = model.density(sdf.reshape(z_vals.shape), beta=beta.unsqueeze(-1))
+            density = model.density(sdf.view(z_vals.shape), beta=beta.unsqueeze(-1))
 
             # TODO: need to be more clean
             # TODO: cuda -> to device
@@ -276,7 +279,7 @@ class ErrorBoundSampler(RaySampler):
                 )
             else:
                 u = torch.rand(list(cdf.shape[:-1]) + [N]).cuda()
-            u = u.contiguous()
+            # u = u.contiguous()
 
             inds = torch.searchsorted(cdf, u, right=True)
             below = torch.max(torch.zeros_like(inds - 1), inds - 1)
@@ -349,7 +352,7 @@ class ErrorBoundSampler(RaySampler):
         return z_vals, z_samples_eik
 
     def get_error_bound(self, beta, model, sdf, z_vals, dists, d_star):
-        density = model.density(sdf.reshape(z_vals.shape), beta=beta)
+        density = model.density(sdf.squeeze(-1).view(z_vals.shape), beta=beta)
         shifted_free_energy = torch.cat(
             [
                 torch.zeros(dists.shape[0], dists.shape[1], 1).to(dists.device),

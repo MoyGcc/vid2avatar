@@ -156,9 +156,9 @@ class V2AModel(pl.LightningModule):
         return super().training_epoch_end(outputs)
 
     def get_sdf_from_canonical(self, x, cond):
-        x = x.reshape(-1, 3)
+        x = x.view(-1, 3)
         # x = utils.frequency_encoding(x)
-        mnfld_pred = self.model.implicit_network(x, cond)[:, :, 0].reshape(-1, 1)
+        mnfld_pred = self.model.implicit_network(x, cond)[:, :, 0].view(-1, 1)
         return {"sdf": mnfld_pred}
 
     def get_deformed_mesh_fast_mode(self, verts, smpl_tfs, smpl_weights):
@@ -242,21 +242,21 @@ class V2AModel(pl.LightningModule):
         img_size = outputs[0]["img_size"]
 
         rgb_pred = torch.cat([output["rgb_values"] for output in outputs], dim=0)
-        rgb_pred = rgb_pred.reshape(*img_size, -1)
+        rgb_pred = rgb_pred.view(*img_size, -1)
 
         fg_rgb_pred = torch.cat([output["fg_rgb_values"] for output in outputs], dim=0)
-        fg_rgb_pred = fg_rgb_pred.reshape(*img_size, -1)
+        fg_rgb_pred = fg_rgb_pred.view(*img_size, -1)
 
         normal_pred = torch.cat([output["normal_values"] for output in outputs], dim=0)
-        normal_pred = (normal_pred.reshape(*img_size, -1) + 1) / 2
+        normal_pred = (normal_pred.view(*img_size, -1) + 1) / 2
 
         rgb_gt = torch.cat([output["rgb"] for output in outputs], dim=1).squeeze(0)
-        rgb_gt = rgb_gt.reshape(*img_size, -1)
+        rgb_gt = rgb_gt.view(*img_size, -1)
         if "normal" in outputs[0].keys():
             normal_gt = torch.cat(
                 [output["normal"] for output in outputs], dim=1
             ).squeeze(0)
-            normal_gt = (normal_gt.reshape(*img_size, -1) + 1) / 2
+            normal_gt = (normal_gt.view(*img_size, -1) + 1) / 2
             normal = torch.cat([normal_gt, normal_pred], dim=0).cpu().numpy()
         else:
             normal = torch.cat([normal_pred], dim=0).cpu().numpy()
@@ -392,20 +392,20 @@ class V2AModel(pl.LightningModule):
 
         img_size = results[0]["img_size"]
         rgb_pred = torch.cat([result["rgb_values"] for result in results], dim=0)
-        rgb_pred = rgb_pred.reshape(*img_size, -1)
+        rgb_pred = rgb_pred.view(*img_size, -1)
 
         fg_rgb_pred = torch.cat([result["fg_rgb_values"] for result in results], dim=0)
-        fg_rgb_pred = fg_rgb_pred.reshape(*img_size, -1)
+        fg_rgb_pred = fg_rgb_pred.view(*img_size, -1)
 
         normal_pred = torch.cat([result["normal_values"] for result in results], dim=0)
-        normal_pred = (normal_pred.reshape(*img_size, -1) + 1) / 2
+        normal_pred = (normal_pred.view(*img_size, -1) + 1) / 2
 
         pred_mask = torch.cat([result["acc_map"] for result in results], dim=0)
-        pred_mask = pred_mask.reshape(*img_size, -1)
+        pred_mask = pred_mask.view(*img_size, -1)
 
         if results[0]["rgb"] is not None:
             rgb_gt = torch.cat([result["rgb"] for result in results], dim=1).squeeze(0)
-            rgb_gt = rgb_gt.reshape(*img_size, -1)
+            rgb_gt = rgb_gt.view(*img_size, -1)
             rgb = torch.cat([rgb_gt, rgb_pred], dim=0).cpu().numpy()
         else:
             rgb = torch.cat([rgb_pred], dim=0).cpu().numpy()
@@ -413,7 +413,7 @@ class V2AModel(pl.LightningModule):
             normal_gt = torch.cat(
                 [result["normal"] for result in results], dim=1
             ).squeeze(0)
-            normal_gt = (normal_gt.reshape(*img_size, -1) + 1) / 2
+            normal_gt = (normal_gt.view(*img_size, -1) + 1) / 2
             normal = torch.cat([normal_gt, normal_pred], dim=0).cpu().numpy()
         else:
             normal = torch.cat([normal_pred], dim=0).cpu().numpy()
@@ -427,7 +427,7 @@ class V2AModel(pl.LightningModule):
 
         # depth map
         depth_pred = torch.cat([result["depth"] for result in results], dim=0)
-        depth_pred = depth_pred.reshape(*img_size, -1)
+        depth_pred = depth_pred.view(*img_size, -1)
         depth = torch.cat([depth_pred], dim=0).cpu().numpy()
 
         depth = depth / depth.max()  # 0 ~ 1

@@ -108,7 +108,7 @@ class V2A(nn.Module):
         sign = 1 - 2 * sign
         signed_distance = sign * distance
         num_pixels = x_cano.shape[1] // N_samples
-        signed_distance = signed_distance.reshape(batch_size, num_pixels, N_samples, 1)
+        signed_distance = signed_distance.view(batch_size, num_pixels, N_samples, 1)
 
         minimum = torch.min(signed_distance, 2)[0]
         index_off_surface = (minimum > threshold).squeeze(-1)
@@ -176,7 +176,7 @@ class V2A(nn.Module):
             smpl_output["smpl_weights"],
         )
 
-        sdf_output = sdf_output.squeeze(-1).reshape(batch_size, num_pixels, N_samples)
+        sdf_output = sdf_output.squeeze(-1).view(batch_size, num_pixels, N_samples)
 
         if self.training:
             (
@@ -185,7 +185,7 @@ class V2A(nn.Module):
             ) = self.check_off_in_surface_points_cano_mesh(
                 canonical_points, N_samples, threshold=self.threshold
             )
-            canonical_points = canonical_points.reshape(
+            canonical_points = canonical_points.view(
                 batch_size, num_pixels, N_samples, 3
             )
 
@@ -204,15 +204,15 @@ class V2A(nn.Module):
             differentiable_points = canonical_points
 
         else:
-            differentiable_points = canonical_points.reshape(
+            differentiable_points = canonical_points.view(
                 batch_size, num_pixels, N_samples, 3
             )
             grad_theta = None
 
-        # differentiable_points = differentiable_points.reshape(-1, 3)
-        # sdf_output = sdf_output.reshape(-1, 1)
-        # view = -dirs.reshape(-1, 3)
-        # points_flat = points.reshape(-1, 3)
+        # differentiable_points = differentiable_points.view(-1, 3)
+        # sdf_output = sdf_output.view(-1, 1)
+        # view = -dirs.view(-1, 3)
+        # points_flat = points.view(-1, 3)
 
         view = -dirs
 
@@ -233,8 +233,8 @@ class V2A(nn.Module):
         else:
             frame_latent_code = self.frame_latent_encoder(input["idx"])
 
-        fg_rgb = fg_rgb_flat.reshape(batch_size, num_pixels, N_samples, 3)
-        normal_values = normal_values.reshape(batch_size, num_pixels, N_samples, 3)
+        fg_rgb = fg_rgb_flat.view(batch_size, num_pixels, N_samples, 3)
+        normal_values = normal_values.view(batch_size, num_pixels, N_samples, 3)
         weights, bg_transmittance = self.volume_rendering(z_vals, z_max, sdf_output)
 
         fg_rgb_values = torch.sum(weights.unsqueeze(-1) * fg_rgb, 2)
@@ -262,7 +262,7 @@ class V2A(nn.Module):
                 bg_points_flat, {"frame": frame_latent_code}
             )
             bg_sdf = bg_output[..., :1]
-            bg_sdf = bg_sdf.reshape(batch_size, num_pixels, N_bg_samples)
+            bg_sdf = bg_sdf.view(batch_size, num_pixels, N_bg_samples)
 
             bg_feature_vectors = bg_output[..., 1:]
 
@@ -272,12 +272,12 @@ class V2A(nn.Module):
             if bg_rendering_output.shape[-1] == 4:
                 bg_rgb_flat = bg_rendering_output[..., :-1]
                 shadow_r = bg_rendering_output[..., -1]
-                bg_rgb = bg_rgb_flat.reshape(batch_size, num_pixels, N_bg_samples, 3)
-                shadow_r = shadow_r.reshape(batch_size, num_pixels, N_bg_samples, 1)
+                bg_rgb = bg_rgb_flat.view(batch_size, num_pixels, N_bg_samples, 3)
+                shadow_r = shadow_r.view(batch_size, num_pixels, N_bg_samples, 1)
                 bg_rgb = (1 - shadow_r) * bg_rgb
             else:
                 bg_rgb_flat = bg_rendering_output
-                bg_rgb = bg_rgb_flat.reshape(batch_size, num_pixels, N_bg_samples, 3)
+                bg_rgb = bg_rgb_flat.view(batch_size, num_pixels, N_bg_samples, 3)
             bg_weights = self.bg_volume_rendering(z_vals_bg, bg_sdf)
             bg_rgb_values = torch.sum(bg_weights.unsqueeze(-1) * bg_rgb, 2)
         else:
@@ -414,7 +414,7 @@ class V2A(nn.Module):
 
     def bg_volume_rendering(self, z_vals_bg, bg_sdf):
         bg_density = self.bg_density(bg_sdf)
-        # bg_density = bg_density_flat.reshape(
+        # bg_density = bg_density_flat.view(
         #     -1, z_vals_bg.shape[1]
         # )  # (batch_size * num_pixels) x N_samples
 

@@ -2,6 +2,7 @@ import torch
 import torch.nn.functional as F
 from .smpl import SMPLServer
 from pytorch3d import ops
+import einops
 
 
 class SMPLDeformer:
@@ -33,21 +34,22 @@ class SMPLDeformer:
     ):
         if x.shape[0] == 0:
             return x
+        x_flat = einops.rearrange(x, "b n s p -> b (n s) p")
         if smpl_verts is None or smpl_weights is None:
             weights, outlier_mask = self.query_skinning_weights_smpl_multi(
-                x[None], smpl_verts=self.smpl_verts[0], smpl_weights=self.smpl_weights
+                x_flat, smpl_verts=self.smpl_verts[0], smpl_weights=self.smpl_weights
             )
         else:
             # TODO: check which smpl weights to use
             weights, outlier_mask = self.query_skinning_weights_smpl_multi(
-                x[None], smpl_verts=smpl_verts[0], smpl_weights=smpl_weights
+                x_flat, smpl_verts=smpl_verts[0], smpl_weights=smpl_weights
             )
         if return_weights:
             return weights
 
-        x_transformed = skinning(x.unsqueeze(0), weights, smpl_tfs, inverse=inverse)
+        x_transformed = skinning(x_flat, weights, smpl_tfs, inverse=inverse)
 
-        return x_transformed.squeeze(0), outlier_mask
+        return x_transformed, outlier_mask
 
     def forward_skinning(self, xc, cond, smpl_tfs):
         weights, _ = self.query_skinning_weights_smpl_multi(
@@ -58,8 +60,13 @@ class SMPLDeformer:
         return x_transformed
 
     def query_skinning_weights_smpl_multi(self, pts, smpl_verts, smpl_weights):
+        batch_size = pts.size(0)
+        # pts_flat = einops.rearrange(pts, "b n s p -> b (n s) p")
         distance_batch, index_batch, neighbor_points = ops.knn_points(
-            pts, smpl_verts.unsqueeze(0), K=self.K, return_nn=True
+            pts,
+            smpl_verts.unsqueeze(0).repeat(batch_size, 1, 1),
+            K=self.K,
+            return_nn=True,
         )
         distance_batch = torch.clamp(distance_batch, max=4)
         weights_conf = torch.exp(-distance_batch)
@@ -69,7 +76,7 @@ class SMPLDeformer:
         weights = smpl_weights[:, index_batch, :]
         weights = torch.sum(weights * weights_conf.unsqueeze(-1), dim=-2).detach()
 
-        outlier_mask = (distance_batch[..., 0] > self.max_dist)[0]
+        outlier_mask = (distance_batch[..., 0] > self.max_dist).unsqueeze(-1)
         return weights, outlier_mask
 
     def query_weights(self, xc, smpl_weights):

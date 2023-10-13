@@ -38,11 +38,13 @@ class V2AModel(pl.LightningModule):
         self.training_modules = ["model"]
 
         self.training_indices = list(range(self.start_frame, self.end_frame))
-        self.body_model_params = BodyModelParams(num_training_frames, model_type="smpl")
+        self.body_model_params = BodyModelParams(
+            num_training_frames, model_type="smpl")
         self.load_body_model_params()
         optim_params = self.body_model_params.param_names
         for param_name in optim_params:
-            self.body_model_params.set_requires_grad(param_name, requires_grad=True)
+            self.body_model_params.set_requires_grad(
+                param_name, requires_grad=True)
         self.training_modules += ["body_model_params"]
 
         self.loss = Loss(opt.model.loss)
@@ -93,7 +95,8 @@ class V2AModel(pl.LightningModule):
             }
         ]
 
-        optimizer = optim.Adam(params, lr=self.opt.model.learning_rate, eps=1e-8)
+        optimizer = optim.Adam(
+            params, lr=self.opt.model.learning_rate, eps=1e-8)
         self.scheduler = optim.lr_scheduler.MultiStepLR(
             optimizer,
             milestones=self.opt.model.sched_milestones,
@@ -115,7 +118,8 @@ class V2AModel(pl.LightningModule):
 
         body_model_params = self.body_model_params(batch_idx)
         inputs["smpl_pose"] = torch.cat(
-            (body_model_params["global_orient"], body_model_params["body_pose"]), dim=1
+            (body_model_params["global_orient"],
+             body_model_params["body_pose"]), dim=1
         )
         inputs["smpl_shape"] = body_model_params["betas"]
         inputs["smpl_trans"] = body_model_params["transl"]
@@ -158,16 +162,17 @@ class V2AModel(pl.LightningModule):
         return super().training_epoch_end(outputs)
 
     def get_sdf_from_canonical(self, x, cond):
-        x = x.reshape(-1, 3)
+        x = x.view(-1, 3)
         # x = utils.frequency_encoding(x)
-        mnfld_pred = self.model.implicit_network(x, cond)[:, :, 0].reshape(-1, 1)
+        mnfld_pred = self.model.implicit_network(x, cond)[:, :, 0].view(-1, 1)
         return {"sdf": mnfld_pred}
 
     def get_deformed_mesh_fast_mode(self, verts, smpl_tfs, smpl_weights):
         verts = torch.tensor(verts).cuda().float()
         weights = self.model.deformer.query_weights(verts, smpl_weights)
         verts_deformed = (
-            skinning(verts.unsqueeze(0), weights, smpl_tfs).data.cpu().numpy()[0]
+            skinning(verts.unsqueeze(0), weights,
+                     smpl_tfs).data.cpu().numpy()[0]
         )
         return verts_deformed
 
@@ -244,31 +249,31 @@ class V2AModel(pl.LightningModule):
         return batch_parts
 
     def on_validation_epoch_end(self) -> None:
-        
+
         outputs = self.validation_step_outputs
-        
+
         img_size = outputs[0]["img_size"]
 
         rgb_pred = torch.cat([output["rgb_values"]
                              for output in outputs], dim=0)
-        rgb_pred = rgb_pred.reshape(*img_size, -1)
+        rgb_pred = rgb_pred.view(*img_size, -1)
 
         fg_rgb_pred = torch.cat([output["fg_rgb_values"]
                                 for output in outputs], dim=0)
-        fg_rgb_pred = fg_rgb_pred.reshape(*img_size, -1)
+        fg_rgb_pred = fg_rgb_pred.view(*img_size, -1)
 
         normal_pred = torch.cat([output["normal_values"]
                                 for output in outputs], dim=0)
-        normal_pred = (normal_pred.reshape(*img_size, -1) + 1) / 2
+        normal_pred = (normal_pred.view(*img_size, -1) + 1) / 2
 
         rgb_gt = torch.cat([output["rgb"]
                            for output in outputs], dim=1).squeeze(0)
-        rgb_gt = rgb_gt.reshape(*img_size, -1)
+        rgb_gt = rgb_gt.view(*img_size, -1)
         if "normal" in outputs[0].keys():
             normal_gt = torch.cat(
                 [output["normal"] for output in outputs], dim=1
             ).squeeze(0)
-            normal_gt = (normal_gt.reshape(*img_size, -1) + 1) / 2
+            normal_gt = (normal_gt.view(*img_size, -1) + 1) / 2
             normal = torch.cat([normal_gt, normal_pred], dim=0).cpu().numpy()
         else:
             normal = torch.cat([normal_pred], dim=0).cpu().numpy()
@@ -299,7 +304,7 @@ class V2AModel(pl.LightningModule):
         img_size = cfg.metainfo.img_size
         output_img_size = cfg.test.output_img_size if cfg.test.output_img_size is not None else img_size
         pixel_per_batch = cfg.test.pixel_per_batch
-        
+
         total_pixels = batch["uv"].size(0) * batch["uv"].size(1)
         num_splits = (total_pixels + pixel_per_batch - 1) // pixel_per_batch
 
@@ -314,7 +319,7 @@ class V2AModel(pl.LightningModule):
         smpl_trans = body_model_params["transl"]
         smpl_pose = torch.cat(
             (body_model_params["global_orient"],
-            body_model_params["body_pose"]), dim=1
+             body_model_params["body_pose"]), dim=1
         )
 
         smpl_outputs = self.model.smpl_server(
@@ -325,7 +330,8 @@ class V2AModel(pl.LightningModule):
         results = []
 
         for i in range(num_splits):
-            indices = list(range(i * pixel_per_batch, min((i+1) * pixel_per_batch, total_pixels)))
+            indices = list(range(i * pixel_per_batch,
+                           min((i+1) * pixel_per_batch, total_pixels)))
             batch_inputs = {
                 "uv": batch["uv"][:, indices],
                 # "intrinsics": batch["intrinsics"],
@@ -336,7 +342,7 @@ class V2AModel(pl.LightningModule):
                 "smpl_shape": smpl_shape,
                 "smpl_trans": smpl_trans,
                 "idx": batch["idx"] if "idx" in batch.keys() else None,
-                "scale": scale,                
+                "scale": scale,
             }
 
             batch_inputs.update(
@@ -366,7 +372,7 @@ class V2AModel(pl.LightningModule):
             )
 
         idx = int(batch['idx'].cpu().numpy())
-                
+
         if cfg.test.rendering_gt.is_use:
             # rgb gt
             os.makedirs("test_rendering_gt", exist_ok=True)
@@ -379,7 +385,7 @@ class V2AModel(pl.LightningModule):
 
             cv2.imwrite(
                 f"test_rendering_gt/{idx:04d}.png", rgb_gt)
-                            
+
         if cfg.test.normal_map.is_use:
             os.makedirs("test_normal", exist_ok=True)
 
@@ -409,7 +415,7 @@ class V2AModel(pl.LightningModule):
 
             cv2.imwrite(
                 f"test_depth/{idx:04d}.png", depth_pred)
-            
+
         if cfg.test.mesh.is_use:
             os.makedirs("test_mesh", exist_ok=True)
 
@@ -430,17 +436,17 @@ class V2AModel(pl.LightningModule):
                 f"test_mesh/{idx:04d}_canonical.ply")
             mesh_deformed.export(
                 f"test_mesh/{idx:04d}_deformed.ply")
-        
+
         if cfg.test.rendering.is_use:
             os.makedirs("test_rendering", exist_ok=True)
 
             rgb_pred = torch.cat([result["rgb_values"]
-                                for result in results], dim=0)
+                                  for result in results], dim=0)
             rgb_pred = rgb_pred.reshape(*output_img_size, -1)
             rgb_pred = torch.cat([rgb_pred], dim=0).cpu().numpy()
             rgb_pred = (rgb_pred * 255).astype(np.uint8)
             rgb_pred = rgb_pred[:, :, ::-1]
-            
+
             cv2.imwrite(
                 f"test_rendering/{idx:04d}.png", rgb_pred)
 
@@ -460,16 +466,17 @@ class V2AModel(pl.LightningModule):
         if cfg.test.mask.is_use:
             os.makedirs("test_mask", exist_ok=True)
 
-            pred_mask = torch.cat([result["acc_map"] for result in results], dim=0)
+            pred_mask = torch.cat([result["acc_map"]
+                                  for result in results], dim=0)
             pred_mask = pred_mask.reshape(*output_img_size, -1)
             pred_mask = pred_mask.cpu().numpy() * 255
-            
+
             cv2.imwrite(
                 f"test_mask/{idx:04d}.png", pred_mask)
 
         if cfg.test.relight.is_use:
             os.makedirs("test_relight", exist_ok=True)
-            
+
             rgb_gt = batch['rgb']
             uv = batch["uv"]
             view_dir = utils.equirect_to_spherical(uv)
@@ -478,27 +485,29 @@ class V2AModel(pl.LightningModule):
                                     for result in results], dim=0)
             normal_pred = normal_pred.unsqueeze(0)
 
-            assert(rgb_gt.shape == normal_pred.shape)
+            assert (rgb_gt.shape == normal_pred.shape)
 
             lighting_sum = 0
             for light_color, light_dir in zip(cfg.test.relight.light_colors, cfg.test.relight.light_directions):
                 light_dir = torch.tensor(light_dir, device=rgb_gt.device)
                 light_dir = light_dir / torch.norm(light_dir)
-                light_dir = light_dir.unsqueeze(0).unsqueeze(0).repeat(*rgb_gt.shape[:2], 1)  # (b, n, 1)
+                light_dir = light_dir.unsqueeze(0).unsqueeze(
+                    0).repeat(*rgb_gt.shape[:2], 1)  # (b, n, 1)
                 light_color = torch.tensor(light_color, device=rgb_gt.device)
-                light_color = light_color.unsqueeze(0).unsqueeze(0).repeat(*rgb_gt.shape[:2], 1)  # (b, n, 1)
+                light_color = light_color.unsqueeze(0).unsqueeze(
+                    0).repeat(*rgb_gt.shape[:2], 1)  # (b, n, 1)
 
-                lighting = phong_lighting(normal_pred, 
-                                          light_dir, 
-                                          light_color, 
-                                          view_dir, 
+                lighting = phong_lighting(normal_pred,
+                                          light_dir,
+                                          light_color,
+                                          view_dir,
                                           shininess=cfg.test.relight.shininess,
                                           ambient=cfg.test.relight.ambient,
                                           diffuse=cfg.test.relight.diffuse,
                                           specular=cfg.test.relight.specular)
-            
+
                 lighting_sum += lighting
-    
+
             relighted_rgb = rgb_gt * lighting_sum
             relighted_rgb = relighted_rgb.clamp(min=0.0, max=1.0)
 
@@ -510,14 +519,14 @@ class V2AModel(pl.LightningModule):
 
             cv2.imwrite(
                 f"test_relight/{idx:04d}.png", relighted_rgb)
-            
+
 
 def phong_lighting(normal_map,
-                   light_dir, 
-                   light_color, 
-                   view_dir, 
+                   light_dir,
+                   light_color,
+                   view_dir,
                    specular=1.0,
-                   diffuse=0.8, 
+                   diffuse=0.8,
                    ambient=0.2,
                    shininess=32):
     """
@@ -526,22 +535,25 @@ def phong_lighting(normal_map,
     light_color (torch.Tensor): (b, n, 3)
     view_dir (torch.Tensor): (b, n, 3)
     """
-    
+
     # Specular
-    reflect_dir = 2 * torch.einsum("bnd,bnd->bn", normal_map, light_dir).unsqueeze(-1) * normal_map - light_dir  # Law of Reflection
-    cos_theta = torch.einsum("bnd,bnd->bn", reflect_dir, -view_dir).unsqueeze(-1)
+    reflect_dir = 2 * torch.einsum("bnd,bnd->bn", normal_map,
+                                   light_dir).unsqueeze(-1) * normal_map - light_dir  # Law of Reflection
+    cos_theta = torch.einsum(
+        "bnd,bnd->bn", reflect_dir, -view_dir).unsqueeze(-1)
     cos_theta = torch.clamp(cos_theta, min=0.0, max=1.0)
     specular_term = (cos_theta ** shininess)
     specular_component = specular * specular_term * light_color
 
     # Diffuse
-    diffuse_term = torch.einsum("bnd,bnd->bn", light_dir, normal_map).unsqueeze(-1)
+    diffuse_term = torch.einsum(
+        "bnd,bnd->bn", light_dir, normal_map).unsqueeze(-1)
     diffuse_term = torch.clamp(diffuse_term, min=0.0, max=1.0)
     diffuse_component = diffuse * diffuse_term * light_color
 
     # Ambient
     ambient_component = ambient * light_color
-    
+
     lighting = ambient_component + diffuse_component + specular_component
-    
+
     return lighting

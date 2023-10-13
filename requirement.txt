@@ -7,3 +7,4 @@ wandb==0.13.1
 aitviewer
 trimesh
 setuptools==59.5.0
+einops

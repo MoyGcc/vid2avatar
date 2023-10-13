@@ -83,7 +83,7 @@ class ImplicitNet(nn.Module):
         if num_batch * num_point == 0:
             return input
 
-        input = input.reshape(num_batch * num_point, num_dim)
+        # input = input.reshape(num_batch * num_point, num_dim)
 
         if self.cond != "none":
             num_batch, num_cond = cond[self.cond].shape
@@ -92,7 +92,7 @@ class ImplicitNet(nn.Module):
                 cond[self.cond].unsqueeze(1).expand(num_batch, num_point, num_cond)
             )
 
-            input_cond = input_cond.reshape(num_batch * num_point, num_cond)
+            # input_cond = input_cond.reshape(num_batch * num_point, num_cond)
 
             if self.dim_pose_embed:
                 input_cond = self.lin_p0(input_cond)
@@ -107,12 +107,12 @@ class ImplicitNet(nn.Module):
             if self.cond != "none" and l in self.cond_layer:
                 x = torch.cat([x, input_cond], dim=-1)
             if l in self.skip_in:
-                x = torch.cat([x, input], 1) / np.sqrt(2)
+                x = torch.cat([x, input], dim=-1) / np.sqrt(2)
             x = lin(x)
             if l < self.num_layers - 2:
                 x = self.softplus(x)
 
-        x = x.reshape(num_batch, num_point, -1)
+        # x = x.reshape(num_batch, num_point, -1)
 
         return x
 
@@ -176,17 +176,15 @@ class RenderingNet(nn.Module):
                 view_dirs = self.embedview_fn(view_dirs)
 
         if self.mode == "nerf_frame_encoding":
-            frame_latent_code = frame_latent_code.expand(view_dirs.shape[0], -1)
+            frame_latent_code = frame_latent_code.unsqueeze(1).expand(
+                -1, view_dirs.shape[1], -1
+            )
             rendering_input = torch.cat(
                 [view_dirs, frame_latent_code, feature_vectors], dim=-1
             )
         elif self.mode == "pose":
-            num_points = points.shape[0]
-            body_pose = (
-                body_pose.unsqueeze(1)
-                .expand(-1, num_points, -1)
-                .reshape(num_points, -1)
-            )
+            num_points = points.shape[1]
+            body_pose = body_pose.unsqueeze(1).expand(-1, num_points, -1)
             body_pose = self.lin_pose(body_pose)
             rendering_input = torch.cat(
                 [points, normals, body_pose, feature_vectors], dim=-1

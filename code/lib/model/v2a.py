@@ -22,6 +22,7 @@ from torch.autograd import grad
 import hydra
 import kaolin
 from kaolin.ops.mesh import index_vertices_by_faces
+import einops
 
 
 class V2A(nn.Module):
@@ -67,7 +68,8 @@ class V2A(nn.Module):
             smpl_model_state = torch.load(
                 hydra.utils.to_absolute_path("./assets/smpl_init.pth")
             )
-            self.implicit_network.load_state_dict(smpl_model_state["model_state_dict"])
+            self.implicit_network.load_state_dict(
+                smpl_model_state["model_state_dict"])
 
         self.smpl_v_cano = self.smpl_server.verts_c
         self.smpl_f_cano = torch.tensor(
@@ -93,31 +95,34 @@ class V2A(nn.Module):
                 smpl_weights=smpl_weights,
             )
 
-            output = self.implicit_network(x_c, cond)[0]
-            sdf = output[:, 0:1]
-            feature = output[:, 1:]
+            output = self.implicit_network(x_c, cond)
+            sdf = output[:, :, 0:1]
+            feature = output[:, :, 1:]
             if not self.training:
-                sdf[outlier_mask] = 4.0  # set a large SDF value for outlier points
+                # set a large SDF value for outlier points
+                sdf[outlier_mask] = 4.0
 
         return sdf, x_c, feature
 
     def check_off_in_surface_points_cano_mesh(self, x_cano, N_samples, threshold=0.05):
+        batch_size = x_cano.size(0)
         distance, _, _ = kaolin.metrics.trianglemesh.point_to_mesh_distance(
-            x_cano.unsqueeze(0).contiguous(), self.mesh_face_vertices
+            x_cano.contiguous(), self.mesh_face_vertices.repeat(batch_size, 1, 1, 1)
         )
 
         distance = torch.sqrt(distance)  # kaolin outputs squared distance
         sign = kaolin.ops.mesh.check_sign(
-            self.mesh_v_cano, self.mesh_f_cano, x_cano.unsqueeze(0)
+            self.mesh_v_cano, self.mesh_f_cano, x_cano
         ).float()
         sign = 1 - 2 * sign
         signed_distance = sign * distance
-        batch_size = x_cano.shape[0] // N_samples
-        signed_distance = signed_distance.reshape(batch_size, N_samples, 1)
+        num_pixels = x_cano.shape[1] // N_samples
+        signed_distance = signed_distance.view(
+            batch_size, num_pixels, N_samples, 1)
 
-        minimum = torch.min(signed_distance, 1)[0]
-        index_off_surface = (minimum > threshold).squeeze(1)
-        index_in_surface = (minimum <= 0.0).squeeze(1)
+        minimum = torch.min(signed_distance, 2)[0]
+        index_off_surface = (minimum > threshold).squeeze(-1)
+        index_in_surface = (minimum <= 0.0).squeeze(-1)
         return index_off_surface, index_in_surface
 
     def forward(self, input):
@@ -149,9 +154,7 @@ class V2A(nn.Module):
         )
         batch_size, num_pixels, _ = ray_dirs.shape
 
-        cam_loc = cam_loc.unsqueeze(1).repeat(
-            1, num_pixels, 1).reshape(-1, 3)
-        ray_dirs = ray_dirs.reshape(-1, 3)
+        cam_loc = cam_loc.unsqueeze(1).repeat(1, num_pixels, 1)
 
         z_vals, _ = self.ray_sampler.get_z_vals(
             ray_dirs,
@@ -165,28 +168,28 @@ class V2A(nn.Module):
         )
 
         z_vals, z_vals_bg = z_vals
-        z_max = z_vals[:, -1]
-        z_vals = z_vals[:, :-1]
-        N_samples = z_vals.shape[1]
+        z_max = z_vals[:, :, -1]
+        z_vals = z_vals[:, :, :-1]
+        N_samples = z_vals.shape[2]
 
-        points = cam_loc.unsqueeze(
-            1) + z_vals.unsqueeze(2) * ray_dirs.unsqueeze(1)
-        points_flat = points.reshape(-1, 3)
+        points = cam_loc.unsqueeze(-2) + \
+            z_vals.unsqueeze(-1) * ray_dirs.unsqueeze(-2)
 
-        dirs = ray_dirs.unsqueeze(1).repeat(1, N_samples, 1)
+        dirs = ray_dirs.unsqueeze(2).repeat(1, 1, N_samples, 1)
         (
             sdf_output,
             canonical_points,
             feature_vectors,
         ) = self.sdf_func_with_smpl_deformer(
-            points_flat,
+            points,
             cond,
             smpl_tfs,
             smpl_output["smpl_verts"],
             smpl_output["smpl_weights"],
         )
 
-        sdf_output = sdf_output.unsqueeze(1)
+        sdf_output = sdf_output.squeeze(-1).view(batch_size,
+                                                 num_pixels, N_samples)
 
         if self.training:
             (
@@ -195,9 +198,9 @@ class V2A(nn.Module):
             ) = self.check_off_in_surface_points_cano_mesh(
                 canonical_points, N_samples, threshold=self.threshold
             )
-            canonical_points = canonical_points.reshape(num_pixels, N_samples, 3)
-
-            canonical_points = canonical_points.reshape(-1, 3)
+            canonical_points = canonical_points.view(
+                batch_size, num_pixels, N_samples, 3
+            )
 
             # sample canonical SMPL surface pnts for the eikonal loss
             smpl_verts_c = self.smpl_server.verts_c.repeat(batch_size, 1, 1)
@@ -214,17 +217,21 @@ class V2A(nn.Module):
             differentiable_points = canonical_points
 
         else:
-            differentiable_points = canonical_points.reshape(
-                num_pixels, N_samples, 3
-            ).reshape(-1, 3)
+            differentiable_points = canonical_points.view(
+                batch_size, num_pixels, N_samples, 3
+            )
             grad_theta = None
 
-        z_vals = z_vals
-        view = -dirs.reshape(-1, 3)
+        # differentiable_points = differentiable_points.view(-1, 3)
+        # sdf_output = sdf_output.view(-1, 1)
+        # view = -dirs.view(-1, 3)
+        # points_flat = points.view(-1, 3)
+
+        view = -dirs
 
         if differentiable_points.shape[0] > 0:
             fg_rgb_flat, others = self.get_rbg_value(
-                points_flat,
+                points,
                 differentiable_points,
                 view,
                 cond,
@@ -239,16 +246,17 @@ class V2A(nn.Module):
         else:
             frame_latent_code = self.frame_latent_encoder(input["idx"])
 
-        fg_rgb = fg_rgb_flat.reshape(-1, N_samples, 3)
-        normal_values = normal_values.reshape(-1, N_samples, 3)
+        fg_rgb = fg_rgb_flat.view(batch_size, num_pixels, N_samples, 3)
+        normal_values = normal_values.view(
+            batch_size, num_pixels, N_samples, 3)
         weights, bg_transmittance = self.volume_rendering(
             z_vals, z_max, sdf_output)
 
-        fg_rgb_values = torch.sum(weights.unsqueeze(-1) * fg_rgb, 1)
+        fg_rgb_values = torch.sum(weights.unsqueeze(-1) * fg_rgb, 2)
 
         # Background rendering
         if input["idx"] is not None:
-            N_bg_samples = z_vals_bg.shape[1]
+            N_bg_samples = z_vals_bg.shape[2]
             z_vals_bg = torch.flip(
                 z_vals_bg,
                 dims=[
@@ -256,20 +264,23 @@ class V2A(nn.Module):
                 ],
             )  # 1--->0
 
-            bg_dirs = ray_dirs.unsqueeze(1).repeat(1, N_bg_samples, 1)
-            bg_locs = cam_loc.unsqueeze(1).repeat(1, N_bg_samples, 1)
+            bg_dirs = ray_dirs.unsqueeze(2).repeat(1, 1, N_bg_samples, 1)
+            bg_locs = cam_loc.unsqueeze(2).repeat(1, 1, N_bg_samples, 1)
 
             bg_points = self.depth2pts_outside(
                 bg_locs, bg_dirs, z_vals_bg
             )  # [..., N_samples, 4]
-            bg_points_flat = bg_points.reshape(-1, 4)
-            bg_dirs_flat = bg_dirs.reshape(-1, 3)
-            # bg_points_flat = utils.frequency_encoding(bg_points_flat)
+
+            bg_points_flat = einops.rearrange(
+                bg_points, "b n s p -> b (n s) p")
+            bg_dirs_flat = einops.rearrange(bg_dirs, "b n s p -> b (n s) p")
             bg_output = self.bg_implicit_network(
                 bg_points_flat, {"frame": frame_latent_code}
-            )[0]
-            bg_sdf = bg_output[:, :1]
-            bg_feature_vectors = bg_output[:, 1:]
+            )
+            bg_sdf = bg_output[..., :1]
+            bg_sdf = bg_sdf.view(batch_size, num_pixels, N_bg_samples)
+
+            bg_feature_vectors = bg_output[..., 1:]
 
             bg_rendering_output = self.bg_rendering_network(
                 None, None, bg_dirs_flat, None, bg_feature_vectors, frame_latent_code
@@ -277,14 +288,17 @@ class V2A(nn.Module):
             if bg_rendering_output.shape[-1] == 4:
                 bg_rgb_flat = bg_rendering_output[..., :-1]
                 shadow_r = bg_rendering_output[..., -1]
-                bg_rgb = bg_rgb_flat.reshape(-1, N_bg_samples, 3)
-                shadow_r = shadow_r.reshape(-1, N_bg_samples, 1)
+                bg_rgb = bg_rgb_flat.view(
+                    batch_size, num_pixels, N_bg_samples, 3)
+                shadow_r = shadow_r.view(
+                    batch_size, num_pixels, N_bg_samples, 1)
                 bg_rgb = (1 - shadow_r) * bg_rgb
             else:
                 bg_rgb_flat = bg_rendering_output
-                bg_rgb = bg_rgb_flat.reshape(-1, N_bg_samples, 3)
+                bg_rgb = bg_rgb_flat.view(
+                    batch_size, num_pixels, N_bg_samples, 3)
             bg_weights = self.bg_volume_rendering(z_vals_bg, bg_sdf)
-            bg_rgb_values = torch.sum(bg_weights.unsqueeze(-1) * bg_rgb, 1)
+            bg_rgb_values = torch.sum(bg_weights.unsqueeze(-1) * bg_rgb, 2)
         else:
             bg_rgb_values = torch.ones_like(
                 fg_rgb_values, device=fg_rgb_values.device)
@@ -293,10 +307,10 @@ class V2A(nn.Module):
         bg_rgb_values = bg_transmittance.unsqueeze(-1) * bg_rgb_values
         rgb_values = fg_rgb_values + bg_rgb_values
 
-        normal_values = torch.sum(weights.unsqueeze(-1) * normal_values, 1)
+        normal_values = torch.sum(weights.unsqueeze(-1) * normal_values, 2)
 
         # Depth map
-        depth = torch.norm(points - cam_loc.unsqueeze(1), dim=-1)
+        depth = torch.norm(points - cam_loc.unsqueeze(2), dim=-1)
         depth = torch.sum(weights * depth, dim=-1)
 
         if self.training:
@@ -329,38 +343,39 @@ class V2A(nn.Module):
     def get_rbg_value(
         self, x, points, view_dirs, cond, tfs, feature_vectors, is_training=True
     ):
+        points = einops.rearrange(points, "b n s p -> b (n s) p")
+
         pnts_c = points
         others = {}
 
-        _, gradients, feature_vectors = self.forward_gradient(
-            x, pnts_c, cond, tfs, create_graph=is_training, retain_graph=is_training
+        gradients, feature_vectors = self.forward_gradient(
+            pnts_c, cond, tfs, create_graph=is_training, retain_graph=is_training
         )
         # ensure the gradient is normalized
         normals = nn.functional.normalize(gradients, dim=-1, eps=1e-6)
+
+        view_dirs = einops.rearrange(view_dirs, "b n s p -> b (n s) p")
+
         fg_rendering_output = self.rendering_network(
             pnts_c, normals, view_dirs, cond["smpl"], feature_vectors
         )
 
-        rgb_vals = fg_rendering_output[:, :3]
+        rgb_vals = fg_rendering_output[..., :3]
         others["normals"] = normals
         return rgb_vals, others
 
-    def forward_gradient(
-        self, x, pnts_c, cond, tfs, create_graph=True, retain_graph=True
-    ):
+    def forward_gradient(self, pnts_c, cond, tfs, create_graph=True, retain_graph=True):
         if pnts_c.shape[0] == 0:
             return pnts_c.detach()
         pnts_c.requires_grad_(True)
 
-        pnts_d = self.deformer.forward_skinning(pnts_c.unsqueeze(0), None, tfs).squeeze(
-            0
-        )
+        pnts_d = self.deformer.forward_skinning(pnts_c, None, tfs)
         num_dim = pnts_d.shape[-1]
         grads = []
         for i in range(num_dim):
             d_out = torch.zeros_like(
                 pnts_d, requires_grad=False, device=pnts_d.device)
-            d_out[:, i] = 1
+            d_out[:, :, i] = 1
             grad = torch.autograd.grad(
                 outputs=pnts_d,
                 inputs=pnts_c,
@@ -374,11 +389,10 @@ class V2A(nn.Module):
 
         grads_inv = grads.inverse()
 
-        # pnts_c_freq = utils.frequency_encoding(pnts_c)
-        output = self.implicit_network(pnts_c, cond)[0]
-        sdf = output[:, :1]
+        output = self.implicit_network(pnts_c, cond)
+        sdf = output[..., :1]
 
-        feature = output[:, 1:]
+        feature = output[..., 1:]
         d_output = torch.ones_like(sdf, requires_grad=False, device=sdf.device)
         gradients = torch.autograd.grad(
             outputs=sdf,
@@ -389,52 +403,54 @@ class V2A(nn.Module):
             only_inputs=True,
         )[0]
 
-        return (
-            grads.reshape(grads.shape[0], -1),
-            torch.nn.functional.normalize(
-                torch.einsum("bi,bij->bj", gradients, grads_inv), dim=1
-            ),
-            feature,
-        )
+        return torch.einsum("bni,bnij->bnj", gradients, grads_inv), feature
 
     def volume_rendering(self, z_vals, z_max, sdf):
-        density_flat = self.density(sdf)
-        density = density_flat.reshape(
-            -1, z_vals.shape[1]
-        )  # (batch_size * num_pixels) x N_samples
+        batch_size, num_pixels, N_samples = z_vals.shape
+        density = self.density(sdf)
 
         # included also the dist from the sphere intersection
-        dists = z_vals[:, 1:] - z_vals[:, :-1]
-        dists = torch.cat([dists, z_max.unsqueeze(-1) - z_vals[:, -1:]], -1)
+        dists = z_vals[..., 1:] - z_vals[..., :-1]
+        dists = torch.cat([dists, z_max.unsqueeze(-1) - z_vals[..., -1:]], -1)
 
         # LOG SPACE
         free_energy = dists * density
         shifted_free_energy = torch.cat(
-            [torch.zeros(dists.shape[0], 1).cuda(), free_energy], dim=-1
+            [
+                torch.zeros(dists.shape[0], dists.shape[1], 1).to(
+                    z_vals.device),
+                free_energy,
+            ],
+            dim=-1,
         )  # add 0 for transperancy 1 at t_0
-        alpha = 1 - torch.exp(-free_energy)  # probability of it is not empty here
+        # probability of it is not empty here
+        alpha = 1 - torch.exp(-free_energy)
         transmittance = torch.exp(
             -torch.cumsum(shifted_free_energy, dim=-1)
         )  # probability of everything is empty up to now
-        fg_transmittance = transmittance[:, :-1]
+        fg_transmittance = transmittance[..., :-1]
         weights = alpha * fg_transmittance  # probability of the ray hits something here
         bg_transmittance = transmittance[
-            :, -1
+            ..., -1
         ]  # factor to be multiplied with the bg volume rendering
 
         return weights, bg_transmittance
 
     def bg_volume_rendering(self, z_vals_bg, bg_sdf):
-        bg_density_flat = self.bg_density(bg_sdf)
-        bg_density = bg_density_flat.reshape(
-            -1, z_vals_bg.shape[1]
-        )  # (batch_size * num_pixels) x N_samples
+        bg_density = self.bg_density(bg_sdf)
+        # bg_density = bg_density_flat.view(
+        #     -1, z_vals_bg.shape[1]
+        # )  # (batch_size * num_pixels) x N_samples
 
-        bg_dists = z_vals_bg[:, :-1] - z_vals_bg[:, 1:]
+        bg_dists = z_vals_bg[..., :-1] - z_vals_bg[..., 1:]
         bg_dists = torch.cat(
             [
                 bg_dists,
-                torch.tensor([1e10]).cuda().unsqueeze(0).repeat(bg_dists.shape[0], 1),
+                torch.tensor([1e10])
+                .to(z_vals_bg.device)
+                .unsqueeze(0)
+                .unsqueeze(1)
+                .repeat(bg_dists.shape[0], bg_dists.shape[1], 1),
             ],
             -1,
         )
@@ -442,9 +458,16 @@ class V2A(nn.Module):
         # LOG SPACE
         bg_free_energy = bg_dists * bg_density
         bg_shifted_free_energy = torch.cat(
-            [torch.zeros(bg_dists.shape[0], 1).cuda(), bg_free_energy[:, :-1]], dim=-1
+            [
+                torch.zeros(bg_dists.shape[0], bg_dists.shape[1], 1).to(
+                    z_vals_bg.device
+                ),
+                bg_free_energy[..., :-1],
+            ],
+            dim=-1,
         )  # shift one step
-        bg_alpha = 1 - torch.exp(-bg_free_energy)  # probability of it is not empty here
+        # probability of it is not empty here
+        bg_alpha = 1 - torch.exp(-bg_free_energy)
         bg_transmittance = torch.exp(
             -torch.cumsum(bg_shifted_free_energy, dim=-1)
         )  # probability of everything is empty up to now
@@ -484,14 +507,16 @@ class V2A(nn.Module):
             * torch.sum(rot_axis * p_sphere, dim=-1, keepdim=True)
             * (1.0 - torch.cos(rot_angle))
         )
-        p_sphere_new = p_sphere_new / torch.norm(p_sphere_new, dim=-1, keepdim=True)
+        p_sphere_new = p_sphere_new / \
+            torch.norm(p_sphere_new, dim=-1, keepdim=True)
         pts = torch.cat((p_sphere_new, depth.unsqueeze(-1)), dim=-1)
 
         return pts
 
 
 def gradient(inputs, outputs):
-    d_points = torch.ones_like(outputs, requires_grad=False, device=outputs.device)
+    d_points = torch.ones_like(
+        outputs, requires_grad=False, device=outputs.device)
     points_grad = grad(
         outputs=outputs,
         inputs=inputs,

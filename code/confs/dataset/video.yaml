@@ -8,7 +8,7 @@ metainfo:
 
 train:
     type: "Video"
-    batch_size: 1
+    batch_size: 2
     drop_last: False
     shuffle: True
     worker: 8

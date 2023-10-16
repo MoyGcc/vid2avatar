@@ -1,25 +1,26 @@
 metainfo:
     gender: 'male'
-    data_dir : parkinglot/
-    subject: "parkinglot"
+    data_dir : data_tpain_12fps/
+    subject: "data_tpain_12fps"
     start_frame: 0
-    end_frame: 42
+    end_frame: 100
+    img_size: [960, 960]
 
 train:
     type: "Video"
-    batch_size: 1
+    batch_size: 6
     drop_last: False
     shuffle: True
     worker: 8
 
-    num_sample : 512 
+    num_sample : 1024 
 
 valid:
     type: "VideoVal"
     image_id: 0
     batch_size: 1
     drop_last: False
-    shuffle: False
+    shuffle: True
     worker: 8
 
     num_sample : -1
@@ -31,7 +32,36 @@ test:
     batch_size: 1
     drop_last: False
     shuffle: False
-    worker: 8
-
+    worker: 16
     num_sample : -1
-    pixel_per_batch: 2048
+    pixel_per_batch: 6144
+    output_img_size: ~
+    rendering_gt:
+        is_use: True
+    normal_map:
+        is_use: True
+    depth_map:
+        is_use: True
+    mesh:
+        is_use: True
+        point_batch: 10000
+    rendering:
+        is_use: True
+    fg_rendering:    
+        is_use: True
+    mask:
+        is_use: True
+    relight:
+        is_use: True
+        specular: 0.0
+        diffuse: 0.5
+        ambient: 0.5
+        shininess: 16
+        light_directions: [
+            [1.0, 0.0, 1.0], 
+            [-1.0, 0.0, 1.0]
+        ]
+        light_colors: [
+            [1.0, 1.0, 1.0],
+            [1.0, 1.0, 1.0]
+        ]

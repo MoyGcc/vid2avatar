@@ -1,7 +1,8 @@
 learning_rate : 5.0e-4
+body_param_learning_rate : 1.0e-3
 sched_milestones : [200,500]
 sched_factor : 0.5
-smpl_init: True
+smpl_init: False
 is_continue: False
 use_body_parsing: False
 with_bkgd: True
@@ -21,7 +22,6 @@ implicit_network:
     embedder_mode: 'fourier'
     multires: 6
     cond: 'smpl'
-    scene_bounding_sphere: 3.0
 rendering_network:
     feature_vector_size: 256
     mode: "pose"
@@ -75,3 +75,4 @@ loss:
     bce_weight: 5.0e-3
     opacity_sparse_weight: 3.0e-3
     in_shape_weight: 1.0e-2
+    mask_weight: 1.0e-3

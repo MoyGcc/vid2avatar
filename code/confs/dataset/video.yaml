@@ -34,7 +34,7 @@ test:
     shuffle: False
     worker: 16
     num_sample : -1
-    pixel_per_batch: 3072
+    pixel_per_batch: 6144
     output_img_size: ~
     rendering_gt:
         is_use: True

@@ -3,6 +3,7 @@ chumpy==0.70
 scikit-image==0.18.1
 torch==1.9.1
 torchvision==0.10.1
+pytorch_lightning
 git+https://github.com/facebookresearch/pytorch3d.git
 pytorch-lightning==1.5.7
 hydra-core==1.1.1

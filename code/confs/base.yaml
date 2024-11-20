@@ -1,6 +1,6 @@
 hydra:
     run:
-        dir: "../outputs/${exp}/${run}"
+        dir: "./outputs/${exp}/${run}"
 
 defaults:
   - model: model_w_bg
